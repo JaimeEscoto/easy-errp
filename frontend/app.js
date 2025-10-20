@@ -41,8 +41,7 @@ form.addEventListener('submit', async (event) => {
     }
 
     showMessage('Inicio de sesión exitoso, redirigiendo…', 'success');
-    // Aquí puedes redirigir al panel privado
-    // window.location.href = '/dashboard.html';
+    window.location.href = 'dashboard.html';
   } catch (error) {
     console.error('Login error:', error);
     showMessage('No se pudo conectar con el servidor. Intenta nuevamente.', 'error');
