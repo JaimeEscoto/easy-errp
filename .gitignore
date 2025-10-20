@@ -6,3 +6,6 @@ backend/.env
 
 # Archivos del sistema
 .DS_Store
+
+# Artefactos de build del frontend
+frontend/dist/
