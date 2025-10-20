@@ -1,0 +1,8 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno
+backend/.env
+
+# Archivos del sistema
+.DS_Store

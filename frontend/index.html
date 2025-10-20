@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panel Administrativo - Inicio de sesión</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="login-container">
+      <section class="card">
+        <h1>Inicia sesión</h1>
+        <p class="subtitle">Accede con tu usuario administrador.</p>
+        <form id="login-form">
+          <label for="email">Correo electrónico</label>
+          <input type="email" id="email" name="email" required placeholder="admin@empresa.com" />
+
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" required placeholder="••••••••" />
+
+          <button type="submit">Ingresar</button>
+        </form>
+        <p id="message" role="alert"></p>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
