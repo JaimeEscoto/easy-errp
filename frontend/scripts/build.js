@@ -22,7 +22,13 @@ const cleanDist = () => {
 };
 
 const copyFiles = () => {
-  const filesToCopy = ['index.html', 'app.js', 'config.js', 'styles.css', 'env.js'];
+  const staticFiles = ['app.js', 'config.js', 'styles.css', 'env.js'];
+  const htmlFiles = fs
+    .readdirSync(frontendDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.html'))
+    .map((entry) => entry.name);
+
+  const filesToCopy = [...new Set([...htmlFiles, ...staticFiles])];
 
   filesToCopy.forEach((fileName) => {
     const sourcePath = path.join(frontendDir, fileName);
