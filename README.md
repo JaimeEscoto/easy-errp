@@ -71,7 +71,13 @@ Este repositorio incluye un ejemplo mínimo de autenticación dividido en **back
 
 ### Frontend
 
-1. Dentro de `frontend/`, ajusta la URL del backend que usarás. Por defecto el archivo [`config.js`](frontend/config.js) apunta a `http://localhost:4000`. Para producción cambia el valor a la URL HTTPS del backend en Render.
+1. Dentro de `frontend/`, ejecuta el generador de configuración indicando la URL del backend:
+
+   ```bash
+   BACKEND_URL="https://tu-backend.onrender.com" npm run build --prefix frontend
+   ```
+
+   Si no estableces `BACKEND_URL`, se utilizará `http://localhost:4000` como valor por defecto.
 
 2. Durante desarrollo puedes abrir `index.html` directamente en el navegador o servirlo con tu herramienta estática preferida. El formulario hará peticiones `fetch` al backend configurado.
 
@@ -94,7 +100,7 @@ Este repositorio incluye un ejemplo mínimo de autenticación dividido en **back
 1. Crea un nuevo *Static Site* en Render apuntando al mismo repositorio.
 2. Configura el directorio raíz como `frontend` y deja vacío el comando de build (es un sitio estático).
 3. Define la ruta de publicación como `frontend` y despliega.
-4. Antes de desplegar, actualiza [`frontend/config.js`](frontend/config.js) para que `backendUrl` apunte a la URL pública del backend desplegado.
+4. Antes de desplegar, define en Render la variable de entorno `BACKEND_URL` con la URL pública del backend y agrega como comando de build del sitio estático `npm run build` (con directorio `frontend`). El script generará `env.js` con ese valor y el frontend consumirá automáticamente la URL correcta.
 
 ## Uso del login
 

@@ -46,7 +46,14 @@ El servidor escuchará en `http://localhost:4000`.
 
 ## 4. Ajustar y probar el frontend
 
-1. En `frontend/config.js` verifica que `backendUrl` sea `http://localhost:4000` mientras desarrollas localmente.
+1. Genera el archivo `env.js` dentro de `frontend/` ejecutando:
+
+   ```bash
+   BACKEND_URL="http://localhost:4000" npm run build --prefix frontend
+   ```
+
+   Puedes omitir la variable `BACKEND_URL` si usarás el valor por defecto (`http://localhost:4000`).
+
 2. Abre `frontend/index.html` en el navegador y realiza una prueba de login con el usuario administrador creado.
 
 ## 5. Preparar despliegue en Render
@@ -61,6 +68,6 @@ El servidor escuchará en `http://localhost:4000`.
 
 - Servicio: *Static Site*.
 - Directorio de publicación: `frontend`.
-- Antes de desplegar, modifica `frontend/config.js` con la URL pública del backend (`https://<tu-backend>.onrender.com`).
+- Antes de desplegar, configura en Render la variable de entorno `BACKEND_URL` con la URL pública del backend (`https://<tu-backend>.onrender.com`) y usa `npm run build` como comando de build del sitio estático para generar `env.js` automáticamente.
 
 Con estos pasos tendrás el login funcionando en ambos entornos.
