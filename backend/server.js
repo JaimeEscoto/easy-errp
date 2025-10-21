@@ -441,10 +441,15 @@ articulosRouter.put('/:id', async (req, res) => {
       Object.entries(updatesWithAudit).filter(([, value]) => value !== undefined)
     );
 
-    const { error: updateError } = await supabaseClient
-      .from(ARTICULOS_TABLE)
-      .update(cleanedUpdates, { returning: 'minimal' })
-      .eq('id', id);
+    const {
+      data: updatedData,
+      error: updateError,
+      fallbackUsed: updateFallbackUsed,
+    } = await applyArticuloUpdateWithFallback({
+      id,
+      values: cleanedUpdates,
+      existingData,
+    });
 
     if (updateError) {
       console.error('Update articulo error:', updateError);
@@ -458,10 +463,10 @@ articulosRouter.put('/:id', async (req, res) => {
         );
     }
 
-    const updatedData = { ...existingData, ...cleanedUpdates };
+    const safeUpdatedData = updatedData ?? { ...existingData, ...cleanedUpdates };
 
     const previousActive = normalizeBoolean(existingData?.activo);
-    const nextActive = normalizeBoolean(updatedData?.activo);
+    const nextActive = normalizeBoolean(safeUpdatedData?.activo);
 
     let action = 'update';
 
@@ -470,17 +475,21 @@ articulosRouter.put('/:id', async (req, res) => {
     }
 
     await recordArticuloLog({
-      articuloId: updatedData?.id ?? id,
+      articuloId: safeUpdatedData?.id ?? id,
       action,
       actorId,
       previousData: existingData,
-      newData: updatedData,
-      changes: computeArticuloChanges(existingData, updatedData),
+      newData: safeUpdatedData,
+      changes: computeArticuloChanges(existingData, safeUpdatedData),
     });
+
+    if (updateFallbackUsed) {
+      console.warn('Articulo update responded with data obtained via fallback logic.');
+    }
 
     return res.json({
       message: 'Articulo updated successfully.',
-      id: updatedData?.id ?? id,
+      id: safeUpdatedData?.id ?? id,
     });
   } catch (err) {
     console.error('Unhandled update articulo error:', err);
