@@ -26,12 +26,13 @@
         </div>
         <div class="ml-auto flex items-center gap-4">
           <div class="hidden sm:block text-sm text-gray-600">
-            Hola, <span class="font-medium">Juan Pérez</span>
+            Hola, <span class="font-medium" data-user-display>Juan Pérez</span>
           </div>
           <a
             href="index.html"
             class="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
             aria-label="Cerrar sesión"
+            data-logout
           >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-8a2 2 0 00-2 2v4h2V5h8v14h-8v-4h-2v4a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2z" />
@@ -350,6 +351,7 @@
     </div>
     <script src="env.js"></script>
     <script src="config.js"></script>
+    <script type="module" src="scripts/protected-page.js"></script>
     <script type="module" src="scripts/maestros-articulos.js"></script>
   </body>
 </html>

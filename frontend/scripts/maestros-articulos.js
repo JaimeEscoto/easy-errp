@@ -1,3 +1,8 @@
+import { requireSession } from './session.js';
+
+const session = requireSession();
+const currentAdminId = session?.adminId ?? session?.id ?? session?.userId ?? null;
+
 const sidebar = document.getElementById('sidebar');
 const toggleButton = document.getElementById('sidebar-toggle');
 const overlay = document.getElementById('sidebar-overlay');
@@ -504,6 +509,17 @@ const handleFormSubmit = async (event) => {
   }
 
   setSubmittingState(true);
+
+  if (!currentArticleId) {
+    if (currentAdminId === null || currentAdminId === undefined) {
+      setSubmittingState(false);
+      showToast('No se pudo identificar al usuario actual. Vuelve a iniciar sesión.', 'error');
+      return;
+    }
+
+    const numericAdminId = Number(currentAdminId);
+    payload.created_by = Number.isNaN(numericAdminId) ? currentAdminId : numericAdminId;
+  }
 
   const method = currentArticleId ? 'PUT' : 'POST';
   const path = currentArticleId ? `/${encodeURIComponent(currentArticleId)}` : '';
