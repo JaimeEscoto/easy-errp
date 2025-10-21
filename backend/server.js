@@ -34,6 +34,159 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+const ensureSupabaseConfigured = (_req, res, next) => {
+  if (!supabaseClient) {
+    return res.status(500).json({ message: 'Server is not configured correctly.' });
+  }
+
+  next();
+};
+
+const articulosRouter = express.Router();
+
+articulosRouter.use(ensureSupabaseConfigured);
+
+articulosRouter.post('/', async (req, res) => {
+  try {
+    const payload = req.body ?? {};
+
+    const { data, error } = await supabaseClient
+      .from('articulos')
+      .insert([payload])
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Create articulo error:', error);
+      return res.status(500).json({ message: 'Unexpected error while creating articulo.' });
+    }
+
+    return res.status(201).json(data);
+  } catch (err) {
+    console.error('Unhandled create articulo error:', err);
+    return res.status(500).json({ message: 'Unexpected error while creating articulo.' });
+  }
+});
+
+articulosRouter.get('/', async (_req, res) => {
+  try {
+    const { data, error } = await supabaseClient.from('articulos').select('*');
+
+    if (error) {
+      console.error('List articulos error:', error);
+      return res.status(500).json({ message: 'Unexpected error while fetching articulos.' });
+    }
+
+    return res.json(data ?? []);
+  } catch (err) {
+    console.error('Unhandled list articulos error:', err);
+    return res.status(500).json({ message: 'Unexpected error while fetching articulos.' });
+  }
+});
+
+articulosRouter.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('articulos')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Get articulo error:', error);
+      return res.status(500).json({ message: 'Unexpected error while fetching articulo.' });
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: 'Articulo not found.' });
+    }
+
+    return res.json(data);
+  } catch (err) {
+    console.error('Unhandled get articulo error:', err);
+    return res.status(500).json({ message: 'Unexpected error while fetching articulo.' });
+  }
+});
+
+articulosRouter.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body ?? {};
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('articulos')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Update articulo error:', error);
+      return res.status(500).json({ message: 'Unexpected error while updating articulo.' });
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: 'Articulo not found.' });
+    }
+
+    return res.json(data);
+  } catch (err) {
+    console.error('Unhandled update articulo error:', err);
+    return res.status(500).json({ message: 'Unexpected error while updating articulo.' });
+  }
+});
+
+articulosRouter.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('articulos')
+      .update({ activo: false })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (error && error.code !== '42703') {
+      console.error('Logical delete articulo error:', error);
+      return res.status(500).json({ message: 'Unexpected error while deleting articulo.' });
+    }
+
+    if (!error) {
+      if (!data) {
+        return res.status(404).json({ message: 'Articulo not found.' });
+      }
+
+      return res.json({ message: 'Articulo disabled successfully.', articulo: data });
+    }
+
+    const { data: deletedData, error: deleteError } = await supabaseClient
+      .from('articulos')
+      .delete()
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (deleteError) {
+      console.error('Physical delete articulo error:', deleteError);
+      return res.status(500).json({ message: 'Unexpected error while deleting articulo.' });
+    }
+
+    if (!deletedData) {
+      return res.status(404).json({ message: 'Articulo not found.' });
+    }
+
+    return res.json({ message: 'Articulo deleted successfully.', articulo: deletedData });
+  } catch (err) {
+    console.error('Unhandled delete articulo error:', err);
+    return res.status(500).json({ message: 'Unexpected error while deleting articulo.' });
+  }
+});
+
+app.use('/api/articulos', articulosRouter);
+
 app.post('/api/login', async (req, res) => {
   if (!supabaseClient) {
     return res.status(500).json({ message: 'Server is not configured correctly.' });
