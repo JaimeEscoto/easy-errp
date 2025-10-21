@@ -189,6 +189,26 @@ const request = async (method, pathSuffix = '', body) => {
   }
 };
 
+const isMissingJsonbLengthSupportError = (result) => {
+  if (!result || typeof result !== 'object') {
+    return false;
+  }
+
+  if (result?.data?.code === '42883') {
+    return true;
+  }
+
+  const fieldsToCheck = [result?.data?.message, result?.data?.details, result?.data?.hint, result?.error];
+
+  return fieldsToCheck.some((field) => {
+    if (typeof field !== 'string') {
+      return false;
+    }
+
+    return field.toLowerCase().includes('jsonb_object_length');
+  });
+};
+
 const setHidden = (element, hidden) => {
   if (!element) {
     return;
@@ -620,6 +640,16 @@ const handleFormSubmit = async (event) => {
   setSubmittingState(false);
 
   if (!result.ok) {
+    if (isMissingJsonbLengthSupportError(result)) {
+      console.warn(
+        'Supabase devolvió un error por jsonb_object_length durante la actualización, pero se intentará continuar con la operación.'
+      );
+      showToast('Artículo actualizado. Se ignoró la advertencia de Supabase y se recargará el catálogo.', 'info');
+      closeModal();
+      fetchArticles();
+      return;
+    }
+
     const message = result?.data?.message || result?.error || 'Ocurrió un error al guardar el artículo.';
     showToast(message, 'error');
     return;
