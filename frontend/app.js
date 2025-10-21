@@ -1,5 +1,9 @@
+import { saveSession, clearSession } from './scripts/session.js';
+
 const form = document.getElementById('login-form');
 const messageElement = document.getElementById('message');
+
+clearSession();
 
 const backendBaseUrl = (window.APP_CONFIG && window.APP_CONFIG.backendUrl) || '';
 
@@ -39,6 +43,15 @@ form.addEventListener('submit', async (event) => {
       showMessage(result.message || 'Credenciales incorrectas.', 'error');
       return;
     }
+
+    const sessionPayload = {
+      adminId: result.adminId,
+      email: result.email,
+      name: result.name,
+      displayName: result.displayName,
+    };
+
+    saveSession(sessionPayload);
 
     showMessage('Inicio de sesión exitoso, redirigiendo…', 'success');
     window.location.href = 'dashboard.html';
