@@ -424,29 +424,44 @@ articulosRouter.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Articulo not found.' });
     }
 
-    const {
-      data,
-      error,
-      fallbackUsed: updateFallbackUsed,
-    } = await applyArticuloUpdateWithFallback({
-      id,
-      values: updates,
-      existingData,
-    });
+    const updatesWithAudit = { ...updates };
 
-    if (error) {
-      console.error('Update articulo error:', error);
+    if (updatesWithAudit.id !== undefined) {
+      delete updatesWithAudit.id;
+    }
+
+    if (actorId !== null && actorId !== undefined) {
+      updatesWithAudit.modificado_por = actorId;
+      updatesWithAudit.updated_by = actorId;
+    }
+
+    updatesWithAudit.modificado_en = new Date().toISOString();
+
+    const cleanedUpdates = Object.fromEntries(
+      Object.entries(updatesWithAudit).filter(([, value]) => value !== undefined)
+    );
+
+    const { error: updateError } = await supabaseClient
+      .from(ARTICULOS_TABLE)
+      .update(cleanedUpdates, { returning: 'minimal' })
+      .eq('id', id);
+
+    if (updateError) {
+      console.error('Update articulo error:', updateError);
       return res
         .status(500)
-        .json(formatUnexpectedErrorResponse('Unexpected error while updating articulo.', error));
+        .json(
+          formatUnexpectedErrorResponse(
+            'Unexpected error while updating articulo.',
+            updateError
+          )
+        );
     }
 
-    if (!data) {
-      return res.status(404).json({ message: 'Articulo not found.' });
-    }
+    const updatedData = { ...existingData, ...cleanedUpdates };
 
     const previousActive = normalizeBoolean(existingData?.activo);
-    const nextActive = normalizeBoolean(data?.activo);
+    const nextActive = normalizeBoolean(updatedData?.activo);
 
     let action = 'update';
 
@@ -455,19 +470,18 @@ articulosRouter.put('/:id', async (req, res) => {
     }
 
     await recordArticuloLog({
-      articuloId: data?.id ?? id,
+      articuloId: updatedData?.id ?? id,
       action,
       actorId,
       previousData: existingData,
-      newData: data,
-      changes: computeArticuloChanges(existingData, data),
+      newData: updatedData,
+      changes: computeArticuloChanges(existingData, updatedData),
     });
 
-    if (updateFallbackUsed) {
-      console.warn('Articulo update responded with data obtained via fallback logic.');
-    }
-
-    return res.json(data);
+    return res.json({
+      message: 'Articulo updated successfully.',
+      id: updatedData?.id ?? id,
+    });
   } catch (err) {
     console.error('Unhandled update articulo error:', err);
     return res
