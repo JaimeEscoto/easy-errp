@@ -27,6 +27,171 @@ const supabaseClient =
     ? createClient(supabaseUrl, supabaseServiceRoleKey)
     : null;
 
+const ARTICULOS_TABLE = 'articulos';
+const ARTICULOS_LOG_TABLE_CANDIDATES = ['articulos_log', 'articulos_logs'];
+
+const normalizeBoolean = (value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (['true', 't', '1', 'si', 'sí', 'active', 'activo', 'habilitado'].includes(normalized)) {
+      return true;
+    }
+
+    if (['false', 'f', '0', 'no', 'inactive', 'inactivo', 'deshabilitado'].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const normalizeActorId = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    const asNumber = Number(trimmed);
+
+    if (!Number.isNaN(asNumber)) {
+      return asNumber;
+    }
+
+    return trimmed;
+  }
+
+  return String(value);
+};
+
+const extractActorId = (req, payload = {}) => {
+  const headerCandidates = ['x-admin-id', 'x-user-id', 'x-actor-id'];
+
+  for (const header of headerCandidates) {
+    const value = req.headers?.[header];
+
+    if (value !== undefined && value !== null && value !== '') {
+      return normalizeActorId(value);
+    }
+  }
+
+  const bodyCandidates = ['updated_by', 'modified_by', 'changed_by', 'created_by', 'admin_id', 'user_id'];
+
+  for (const key of bodyCandidates) {
+    const value = payload?.[key] ?? req.body?.[key];
+
+    if (value !== undefined && value !== null && value !== '') {
+      return normalizeActorId(value);
+    }
+  }
+
+  return null;
+};
+
+const TRACKED_FIELDS = [
+  'codigo',
+  'nombre',
+  'descripcion',
+  'precio',
+  'existencia',
+  'unidad',
+  'activo',
+  'created_by',
+  'updated_by',
+];
+
+const computeArticuloChanges = (previousData = {}, newData = {}) => {
+  const relevantKeys = new Set([
+    ...TRACKED_FIELDS,
+    ...Object.keys(previousData ?? {}),
+    ...Object.keys(newData ?? {}),
+  ]);
+
+  const changes = {};
+
+  for (const key of relevantKeys) {
+    if (!TRACKED_FIELDS.includes(key)) {
+      continue;
+    }
+
+    const previousValue = previousData?.[key];
+    const newValue = newData?.[key];
+
+    const normalizedPrevious = previousValue === undefined ? null : previousValue;
+    const normalizedNew = newValue === undefined ? null : newValue;
+
+    if (JSON.stringify(normalizedPrevious) !== JSON.stringify(normalizedNew)) {
+      changes[key] = {
+        before: normalizedPrevious,
+        after: normalizedNew,
+      };
+    }
+  }
+
+  return changes;
+};
+
+const recordArticuloLog = async ({
+  articuloId,
+  action,
+  actorId = null,
+  previousData = null,
+  newData = null,
+  changes = null,
+}) => {
+  if (!supabaseClient) {
+    return;
+  }
+
+  const sanitizedChanges = changes && Object.keys(changes).length ? changes : null;
+
+  const payload = {
+    articulo_id: articuloId ?? null,
+    accion: action,
+    realizado_por: actorId ?? null,
+    datos_previos: previousData,
+    datos_nuevos: newData,
+    cambios: sanitizedChanges,
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+
+  for (const table of ARTICULOS_LOG_TABLE_CANDIDATES) {
+    const { error } = await supabaseClient.from(table).insert([cleanedPayload]);
+
+    if (!error) {
+      return;
+    }
+
+    if (error?.code !== '42P01') {
+      console.error(`Record articulo log error on table ${table}:`, error);
+      return;
+    }
+  }
+
+  console.error('Record articulo log error: none of the expected log tables are available.');
+};
+
 const logSupabaseMisconfiguration = () => {
   const missingList = missingEnvVars.length ? missingEnvVars.join(', ') : 'unknown';
   console.error(
@@ -84,8 +249,10 @@ articulosRouter.post('/', async (req, res) => {
   try {
     const payload = req.body ?? {};
 
+    const actorId = extractActorId(req, payload);
+
     const { data, error } = await supabaseClient
-      .from('articulos')
+      .from(ARTICULOS_TABLE)
       .insert([payload])
       .select()
       .maybeSingle();
@@ -96,6 +263,14 @@ articulosRouter.post('/', async (req, res) => {
         .status(500)
         .json(formatUnexpectedErrorResponse('Unexpected error while creating articulo.', error));
     }
+
+    await recordArticuloLog({
+      articuloId: data?.id ?? null,
+      action: 'create',
+      actorId,
+      newData: data,
+      changes: computeArticuloChanges({}, data),
+    });
 
     return res.status(201).json(data);
   } catch (err) {
@@ -108,7 +283,7 @@ articulosRouter.post('/', async (req, res) => {
 
 articulosRouter.get('/', async (_req, res) => {
   try {
-    const { data, error } = await supabaseClient.from('articulos').select('*');
+    const { data, error } = await supabaseClient.from(ARTICULOS_TABLE).select('*');
 
     if (error) {
       console.error('List articulos error:', error);
@@ -131,7 +306,7 @@ articulosRouter.get('/:id', async (req, res) => {
 
   try {
     const { data, error } = await supabaseClient
-      .from('articulos')
+      .from(ARTICULOS_TABLE)
       .select('*')
       .eq('id', id)
       .maybeSingle();
@@ -161,8 +336,32 @@ articulosRouter.put('/:id', async (req, res) => {
   const updates = req.body ?? {};
 
   try {
+    const actorId = extractActorId(req, updates);
+
+    const { data: existingData, error: fetchError } = await supabaseClient
+      .from(ARTICULOS_TABLE)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('Fetch articulo before update error:', fetchError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Unexpected error while updating articulo.',
+            fetchError
+          )
+        );
+    }
+
+    if (!existingData) {
+      return res.status(404).json({ message: 'Articulo not found.' });
+    }
+
     const { data, error } = await supabaseClient
-      .from('articulos')
+      .from(ARTICULOS_TABLE)
       .update(updates)
       .eq('id', id)
       .select()
@@ -179,6 +378,24 @@ articulosRouter.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Articulo not found.' });
     }
 
+    const previousActive = normalizeBoolean(existingData?.activo);
+    const nextActive = normalizeBoolean(data?.activo);
+
+    let action = 'update';
+
+    if (previousActive !== null && nextActive !== null && previousActive !== nextActive) {
+      action = nextActive ? 'enable' : 'disable';
+    }
+
+    await recordArticuloLog({
+      articuloId: data?.id ?? id,
+      action,
+      actorId,
+      previousData: existingData,
+      newData: data,
+      changes: computeArticuloChanges(existingData, data),
+    });
+
     return res.json(data);
   } catch (err) {
     console.error('Unhandled update articulo error:', err);
@@ -192,49 +409,62 @@ articulosRouter.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
+    const actorId = extractActorId(req);
+
+    const { data: existingData, error: fetchError } = await supabaseClient
+      .from(ARTICULOS_TABLE)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('Fetch articulo before disable error:', fetchError);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while deleting articulo.', fetchError));
+    }
+
+    if (!existingData) {
+      return res.status(404).json({ message: 'Articulo not found.' });
+    }
+
+    const alreadyInactive = normalizeBoolean(existingData?.activo) === false;
+
+    if (alreadyInactive) {
+      return res.json({
+        message: 'Articulo is already disabled.',
+        articulo: existingData,
+      });
+    }
+
     const { data, error } = await supabaseClient
-      .from('articulos')
+      .from(ARTICULOS_TABLE)
       .update({ activo: false })
       .eq('id', id)
       .select()
       .maybeSingle();
 
-    const logicalDeleteFallbackCodes = ['42703', '42883'];
-
-    if (error && !logicalDeleteFallbackCodes.includes(error.code)) {
+    if (error) {
       console.error('Logical delete articulo error:', error);
       return res
         .status(500)
         .json(formatUnexpectedErrorResponse('Unexpected error while deleting articulo.', error));
     }
 
-    if (!error) {
-      if (!data) {
-        return res.status(404).json({ message: 'Articulo not found.' });
-      }
-
-      return res.json({ message: 'Articulo disabled successfully.', articulo: data });
-    }
-
-    const { data: deletedData, error: deleteError } = await supabaseClient
-      .from('articulos')
-      .delete()
-      .eq('id', id)
-      .select()
-      .maybeSingle();
-
-    if (deleteError) {
-      console.error('Physical delete articulo error:', deleteError);
-      return res
-        .status(500)
-        .json(formatUnexpectedErrorResponse('Unexpected error while deleting articulo.', deleteError));
-    }
-
-    if (!deletedData) {
+    if (!data) {
       return res.status(404).json({ message: 'Articulo not found.' });
     }
 
-    return res.json({ message: 'Articulo deleted successfully.', articulo: deletedData });
+    await recordArticuloLog({
+      articuloId: data?.id ?? id,
+      action: 'disable',
+      actorId,
+      previousData: existingData,
+      newData: data,
+      changes: computeArticuloChanges(existingData, data),
+    });
+
+    return res.json({ message: 'Articulo disabled successfully.', articulo: data });
   } catch (err) {
     console.error('Unhandled delete articulo error:', err);
     return res

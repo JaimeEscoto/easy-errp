@@ -76,7 +76,17 @@ let currentArticleId = null;
 let isSubmitting = false;
 let showOnlyInactive = false;
 
-const getArticleStateRawValue = (article) => getFieldValue(article, ['activo', 'active', 'habilitado', 'enabled']);
+const getArticleStateRawValue = (article) => {
+  if (!article) {
+    return undefined;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(article, 'activo')) {
+    return article.activo;
+  }
+
+  return getFieldValue(article, ['active', 'habilitado', 'enabled']);
+};
 
 const interpretActiveState = (stateValue) => {
   if (typeof stateValue === 'string') {
@@ -148,6 +158,10 @@ const request = async (method, pathSuffix = '', body) => {
   if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(body);
+  }
+
+  if (currentAdminId !== null && currentAdminId !== undefined) {
+    options.headers['X-Admin-Id'] = currentAdminId;
   }
 
   try {
@@ -551,6 +565,17 @@ const getFormPayload = () => {
     }
   }
 
+  if (currentAdminId !== null && currentAdminId !== undefined) {
+    const numericAdminId = Number(currentAdminId);
+    const adminIdValue = Number.isNaN(numericAdminId) ? currentAdminId : numericAdminId;
+
+    payload.updated_by = adminIdValue;
+
+    if (!currentArticleId) {
+      payload.created_by = adminIdValue;
+    }
+  }
+
   return payload;
 };
 
@@ -581,18 +606,12 @@ const handleFormSubmit = async (event) => {
     return;
   }
 
-  setSubmittingState(true);
-
-  if (!currentArticleId) {
-    if (currentAdminId === null || currentAdminId === undefined) {
-      setSubmittingState(false);
-      showToast('No se pudo identificar al usuario actual. Vuelve a iniciar sesión.', 'error');
-      return;
-    }
-
-    const numericAdminId = Number(currentAdminId);
-    payload.created_by = Number.isNaN(numericAdminId) ? currentAdminId : numericAdminId;
+  if (currentAdminId === null || currentAdminId === undefined) {
+    showToast('No se pudo identificar al usuario actual. Vuelve a iniciar sesión.', 'error');
+    return;
   }
+
+  setSubmittingState(true);
 
   const method = currentArticleId ? 'PUT' : 'POST';
   const path = currentArticleId ? `/${encodeURIComponent(currentArticleId)}` : '';
@@ -617,11 +636,16 @@ const handleDelete = async (identifier) => {
     return;
   }
 
+  if (currentAdminId === null || currentAdminId === undefined) {
+    showToast('No se pudo identificar al usuario actual. Vuelve a iniciar sesión.', 'error');
+    return;
+  }
+
   const article = articles.find((item) => getArticleIdentifier(item) === identifier);
   const displayName = getFieldValue(article, ['nombre', 'name']) ?? identifier;
 
   const confirmDelete = window.confirm(
-    `¿Deseas desactivar o eliminar el artículo "${displayName}"? Podrás volver a activarlo desde el catálogo.`
+    `¿Deseas desactivar el artículo "${displayName}"? Podrás volver a activarlo desde el catálogo.`
   );
 
   if (!confirmDelete) {
