@@ -220,6 +220,70 @@ const formatUnexpectedErrorResponse = (message, error) => {
   return payload;
 };
 
+const isMissingJsonbObjectLengthError = (error) => {
+  if (!error) {
+    return false;
+  }
+
+  if (error.code !== '42883') {
+    return false;
+  }
+
+  const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+
+  return message.includes('jsonb_object_length');
+};
+
+const applyArticuloUpdateWithFallback = async ({ id, values, existingData, selectColumns = '*' }) => {
+  const createUpdateQuery = () =>
+    supabaseClient.from(ARTICULOS_TABLE).update(values).eq('id', id);
+
+  const initialResult = await createUpdateQuery().select(selectColumns).maybeSingle();
+
+  if (!initialResult.error || !isMissingJsonbObjectLengthError(initialResult.error)) {
+    return {
+      data: initialResult.data ?? null,
+      error: initialResult.error ?? null,
+      fallbackUsed: false,
+      refetchError: null,
+    };
+  }
+
+  console.warn(
+    'Articulo update failed because the database is missing jsonb_object_length(). Retrying without requesting the updated row.'
+  );
+
+  const retryResult = await createUpdateQuery();
+
+  if (retryResult.error) {
+    return {
+      data: null,
+      error: retryResult.error,
+      fallbackUsed: true,
+      refetchError: null,
+    };
+  }
+
+  const { data: refetchedData, error: refetchError } = await supabaseClient
+    .from(ARTICULOS_TABLE)
+    .select(selectColumns)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (refetchError) {
+    console.error('Refetch articulo after fallback update error:', refetchError);
+  }
+
+  const safeData = refetchedData ?? { ...(existingData ?? {}), ...values };
+
+  return {
+    data: safeData,
+    error: null,
+    fallbackUsed: true,
+    refetchError,
+  };
+};
+
 app.use(cors());
 app.use(express.json());
 
@@ -360,12 +424,15 @@ articulosRouter.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Articulo not found.' });
     }
 
-    const { data, error } = await supabaseClient
-      .from(ARTICULOS_TABLE)
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .maybeSingle();
+    const {
+      data,
+      error,
+      fallbackUsed: updateFallbackUsed,
+    } = await applyArticuloUpdateWithFallback({
+      id,
+      values: updates,
+      existingData,
+    });
 
     if (error) {
       console.error('Update articulo error:', error);
@@ -395,6 +462,10 @@ articulosRouter.put('/:id', async (req, res) => {
       newData: data,
       changes: computeArticuloChanges(existingData, data),
     });
+
+    if (updateFallbackUsed) {
+      console.warn('Articulo update responded with data obtained via fallback logic.');
+    }
 
     return res.json(data);
   } catch (err) {
@@ -437,12 +508,15 @@ articulosRouter.delete('/:id', async (req, res) => {
       });
     }
 
-    const { data, error } = await supabaseClient
-      .from(ARTICULOS_TABLE)
-      .update({ activo: false })
-      .eq('id', id)
-      .select()
-      .maybeSingle();
+    const {
+      data,
+      error,
+      fallbackUsed: deleteFallbackUsed,
+    } = await applyArticuloUpdateWithFallback({
+      id,
+      values: { activo: false },
+      existingData,
+    });
 
     if (error) {
       console.error('Logical delete articulo error:', error);
@@ -463,6 +537,10 @@ articulosRouter.delete('/:id', async (req, res) => {
       newData: data,
       changes: computeArticuloChanges(existingData, data),
     });
+
+    if (deleteFallbackUsed) {
+      console.warn('Articulo disable responded with data obtained via fallback logic.');
+    }
 
     return res.json({ message: 'Articulo disabled successfully.', articulo: data });
   } catch (err) {
