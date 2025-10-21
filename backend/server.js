@@ -235,8 +235,8 @@ const isMissingJsonbObjectLengthError = (error) => {
 };
 
 const applyArticuloUpdateWithFallback = async ({ id, values, existingData, selectColumns = '*' }) => {
-  const createUpdateQuery = () =>
-    supabaseClient.from(ARTICULOS_TABLE).update(values).eq('id', id);
+  const createUpdateQuery = (options) =>
+    supabaseClient.from(ARTICULOS_TABLE).update(values, options).eq('id', id);
 
   const initialResult = await createUpdateQuery().select(selectColumns).maybeSingle();
 
@@ -253,7 +253,7 @@ const applyArticuloUpdateWithFallback = async ({ id, values, existingData, selec
     'Articulo update failed because the database is missing jsonb_object_length(). Retrying without requesting the updated row.'
   );
 
-  const retryResult = await createUpdateQuery();
+  const retryResult = await createUpdateQuery({ returning: 'minimal' });
 
   if (retryResult.error) {
     return {
