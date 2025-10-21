@@ -51,6 +51,7 @@ const errorBanner = document.getElementById('articles-error');
 const searchInput = document.getElementById('article-search');
 const addButton = document.getElementById('add-article-button');
 const refreshButton = document.getElementById('refresh-articles-button');
+const toggleInactiveButton = document.getElementById('toggle-inactive-articles-button');
 const totalLabel = document.getElementById('articles-total');
 const toastContainer = document.getElementById('toast-container');
 
@@ -73,6 +74,69 @@ const fieldActivo = document.getElementById('article-activo');
 let articles = [];
 let currentArticleId = null;
 let isSubmitting = false;
+let showOnlyInactive = false;
+
+const getArticleStateRawValue = (article) => getFieldValue(article, ['activo', 'active', 'habilitado', 'enabled']);
+
+const interpretActiveState = (stateValue) => {
+  if (typeof stateValue === 'string') {
+    const normalized = stateValue.trim().toLowerCase();
+    if (['false', '0', 'no', 'inactivo', 'inactive'].includes(normalized)) {
+      return false;
+    }
+    if (['true', '1', 'si', 'sí', 'activo', 'active'].includes(normalized)) {
+      return true;
+    }
+  }
+
+  if (typeof stateValue === 'number') {
+    return stateValue !== 0;
+  }
+
+  if (typeof stateValue === 'boolean') {
+    return stateValue;
+  }
+
+  return true;
+};
+
+const isArticleActive = (article) => interpretActiveState(getArticleStateRawValue(article));
+const isArticleInactive = (article) => !isArticleActive(article);
+
+const updateToggleInactiveButton = () => {
+  if (!toggleInactiveButton) {
+    return;
+  }
+
+  toggleInactiveButton.textContent = '';
+
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'h-4 w-4');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('fill', 'currentColor');
+  icon.setAttribute('aria-hidden', 'true');
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute(
+    'd',
+    'M12 5c3.86 0 7 3.14 7 7s-3.14 7-7 7a6.98 6.98 0 01-5.65-2.83 1 1 0 10-1.7 1.06A8.98 8.98 0 0012 21c4.97 0 9-4.03 9-9s-4.03-9-9-9c-3.15 0-5.92 1.61-7.51 4.05a1 1 0 101.69 1.07A6.98 6.98 0 0112 5zm0 4a3 3 0 11-.001 6.001A3 3 0 0112 9z'
+  );
+
+  icon.appendChild(path);
+  toggleInactiveButton.appendChild(icon);
+
+  const label = document.createElement('span');
+  label.className = 'text-sm font-medium';
+  label.textContent = showOnlyInactive ? 'Ver activos' : 'Ver desactivados';
+  toggleInactiveButton.appendChild(label);
+
+  toggleInactiveButton.setAttribute('aria-pressed', showOnlyInactive ? 'true' : 'false');
+  toggleInactiveButton.classList.toggle('bg-blue-600', showOnlyInactive);
+  toggleInactiveButton.classList.toggle('text-white', showOnlyInactive);
+  toggleInactiveButton.classList.toggle('border-transparent', showOnlyInactive);
+  toggleInactiveButton.classList.toggle('hover:bg-blue-700', showOnlyInactive);
+  toggleInactiveButton.classList.toggle('hover:bg-gray-50', !showOnlyInactive);
+};
 
 const request = async (method, pathSuffix = '', body) => {
   const url = buildUrl(`${articleBasePath}${pathSuffix}`);
@@ -204,6 +268,10 @@ const renderArticles = () => {
 
   const query = searchInput?.value?.trim().toLowerCase() ?? '';
   const filteredArticles = articles.filter((article) => {
+    if (showOnlyInactive && !isArticleInactive(article)) {
+      return false;
+    }
+
     if (!query) {
       return true;
     }
@@ -223,6 +291,7 @@ const renderArticles = () => {
 
   if (!filteredArticles.length) {
     setHidden(emptyState, false);
+    pluralizeArticles(filteredArticles.length);
     return;
   }
 
@@ -237,13 +306,17 @@ const renderArticles = () => {
     const nombre = getFieldValue(article, ['nombre', 'name']) ?? '—';
     const precio = formatCurrency(getFieldValue(article, ['precio', 'price', 'costo', 'cost']));
     const existencia = formatNumber(getFieldValue(article, ['existencia', 'stock', 'cantidad', 'quantity']));
-    const activo = getFieldValue(article, ['activo', 'active', 'habilitado', 'enabled']);
+    const activeRawValue = getArticleStateRawValue(article);
+    const activeState =
+      activeRawValue === undefined || activeRawValue === null || activeRawValue === ''
+        ? null
+        : interpretActiveState(activeRawValue);
     const actualizado = formatDateTime(getFieldValue(article, ['updated_at', 'updatedAt', 'fecha_actualizacion']));
     const estadoBadge = document.createElement('span');
     const estadoConfig =
-      activo === false
+      activeState === false
         ? { className: 'bg-red-100 text-red-700', label: 'Inactivo' }
-        : activo === true
+        : activeState === true
         ? { className: 'bg-emerald-100 text-emerald-700', label: 'Activo' }
         : { className: 'bg-gray-100 text-gray-600', label: 'Sin estado' };
 
@@ -299,6 +372,7 @@ const renderArticles = () => {
   });
 
   articleTableBody.appendChild(fragment);
+  pluralizeArticles(filteredArticles.length);
 };
 
 const showToast = (message, variant = 'success') => {
@@ -382,7 +456,6 @@ const fetchArticles = async () => {
 
   const payload = Array.isArray(result.data) ? result.data : [];
   articles = payload;
-  pluralizeArticles(articles.length);
   renderArticles();
 };
 
@@ -598,6 +671,12 @@ refreshButton?.addEventListener('click', () => {
   fetchArticles();
 });
 
+toggleInactiveButton?.addEventListener('click', () => {
+  showOnlyInactive = !showOnlyInactive;
+  updateToggleInactiveButton();
+  renderArticles();
+});
+
 articleTableBody?.addEventListener('click', (event) => {
   const actionButton = event.target.closest('[data-action]');
   if (!actionButton) {
@@ -621,4 +700,5 @@ articleTableBody?.addEventListener('click', (event) => {
   }
 });
 
+updateToggleInactiveButton();
 fetchArticles();
