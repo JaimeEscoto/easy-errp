@@ -27,6 +27,34 @@ const supabaseClient =
     ? createClient(supabaseUrl, supabaseServiceRoleKey)
     : null;
 
+const logSupabaseMisconfiguration = () => {
+  const missingList = missingEnvVars.length ? missingEnvVars.join(', ') : 'unknown';
+  console.error(
+    `[Supabase] Client is not configured. Missing environment variables: ${missingList}. ` +
+      'Requests depending on Supabase will fail until the variables are provided.'
+  );
+};
+
+const formatUnexpectedErrorResponse = (message, error) => {
+  const payload = { message };
+
+  if (error) {
+    if (error.message) {
+      payload.details = error.message;
+    }
+
+    if (error.code) {
+      payload.code = error.code;
+    }
+
+    if (error.hint) {
+      payload.hint = error.hint;
+    }
+  }
+
+  return payload;
+};
+
 app.use(cors());
 app.use(express.json());
 
@@ -36,7 +64,13 @@ app.get('/api/health', (_req, res) => {
 
 const ensureSupabaseConfigured = (_req, res, next) => {
   if (!supabaseClient) {
-    return res.status(500).json({ message: 'Server is not configured correctly.' });
+    logSupabaseMisconfiguration();
+
+    return res.status(500).json({
+      message: 'Server is not configured correctly.',
+      details: 'Supabase client has not been initialized.',
+      missingEnvVars,
+    });
   }
 
   next();
@@ -58,13 +92,17 @@ articulosRouter.post('/', async (req, res) => {
 
     if (error) {
       console.error('Create articulo error:', error);
-      return res.status(500).json({ message: 'Unexpected error while creating articulo.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating articulo.', error));
     }
 
     return res.status(201).json(data);
   } catch (err) {
     console.error('Unhandled create articulo error:', err);
-    return res.status(500).json({ message: 'Unexpected error while creating articulo.' });
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while creating articulo.', err));
   }
 });
 
@@ -74,13 +112,17 @@ articulosRouter.get('/', async (_req, res) => {
 
     if (error) {
       console.error('List articulos error:', error);
-      return res.status(500).json({ message: 'Unexpected error while fetching articulos.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulos.', error));
     }
 
     return res.json(data ?? []);
   } catch (err) {
     console.error('Unhandled list articulos error:', err);
-    return res.status(500).json({ message: 'Unexpected error while fetching articulos.' });
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulos.', err));
   }
 });
 
@@ -96,7 +138,9 @@ articulosRouter.get('/:id', async (req, res) => {
 
     if (error) {
       console.error('Get articulo error:', error);
-      return res.status(500).json({ message: 'Unexpected error while fetching articulo.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulo.', error));
     }
 
     if (!data) {
@@ -106,7 +150,9 @@ articulosRouter.get('/:id', async (req, res) => {
     return res.json(data);
   } catch (err) {
     console.error('Unhandled get articulo error:', err);
-    return res.status(500).json({ message: 'Unexpected error while fetching articulo.' });
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulo.', err));
   }
 });
 
@@ -124,7 +170,9 @@ articulosRouter.put('/:id', async (req, res) => {
 
     if (error) {
       console.error('Update articulo error:', error);
-      return res.status(500).json({ message: 'Unexpected error while updating articulo.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while updating articulo.', error));
     }
 
     if (!data) {
@@ -134,7 +182,9 @@ articulosRouter.put('/:id', async (req, res) => {
     return res.json(data);
   } catch (err) {
     console.error('Unhandled update articulo error:', err);
-    return res.status(500).json({ message: 'Unexpected error while updating articulo.' });
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while updating articulo.', err));
   }
 });
 
@@ -151,7 +201,9 @@ articulosRouter.delete('/:id', async (req, res) => {
 
     if (error && error.code !== '42703') {
       console.error('Logical delete articulo error:', error);
-      return res.status(500).json({ message: 'Unexpected error while deleting articulo.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while deleting articulo.', error));
     }
 
     if (!error) {
@@ -171,7 +223,9 @@ articulosRouter.delete('/:id', async (req, res) => {
 
     if (deleteError) {
       console.error('Physical delete articulo error:', deleteError);
-      return res.status(500).json({ message: 'Unexpected error while deleting articulo.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while deleting articulo.', deleteError));
     }
 
     if (!deletedData) {
@@ -181,7 +235,9 @@ articulosRouter.delete('/:id', async (req, res) => {
     return res.json({ message: 'Articulo deleted successfully.', articulo: deletedData });
   } catch (err) {
     console.error('Unhandled delete articulo error:', err);
-    return res.status(500).json({ message: 'Unexpected error while deleting articulo.' });
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while deleting articulo.', err));
   }
 });
 
@@ -189,7 +245,13 @@ app.use('/api/articulos', articulosRouter);
 
 app.post('/api/login', async (req, res) => {
   if (!supabaseClient) {
-    return res.status(500).json({ message: 'Server is not configured correctly.' });
+    logSupabaseMisconfiguration();
+
+    return res.status(500).json({
+      message: 'Server is not configured correctly.',
+      details: 'Supabase client has not been initialized.',
+      missingEnvVars,
+    });
   }
 
   const { email, password } = req.body ?? {};
@@ -207,7 +269,9 @@ app.post('/api/login', async (req, res) => {
 
     if (error) {
       console.error('Supabase query error:', error);
-      return res.status(500).json({ message: 'Unexpected error, please try again later.' });
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error, please try again later.', error));
     }
 
     if (!admin) {
@@ -223,7 +287,9 @@ app.post('/api/login', async (req, res) => {
     return res.json({ message: 'Login successful.', adminId: admin.id, email: admin.email });
   } catch (err) {
     console.error('Login error:', err);
-    return res.status(500).json({ message: 'Unexpected error, please try again later.' });
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error, please try again later.', err));
   }
 });
 
