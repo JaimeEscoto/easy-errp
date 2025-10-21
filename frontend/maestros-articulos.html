@@ -111,36 +111,172 @@
       </aside>
       <div id="sidebar-overlay" class="fixed inset-0 z-10 hidden bg-black/30 lg:hidden"></div>
       <main class="p-4 sm:p-6 lg:p-8">
-        <div class="rounded-2xl border-2 border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
-          <h1 class="text-2xl font-semibold text-gray-900">Maestros de Datos · Artículos</h1>
-          <p class="mt-2 text-sm text-gray-500">Pantalla en blanco lista para contenidos futuros.</p>
+        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div class="flex flex-col gap-2 border-b border-gray-200 pb-4 text-left">
+            <h1 class="text-2xl font-semibold text-gray-900">Maestros de Datos · Artículos</h1>
+            <p class="text-sm text-gray-600">
+              Usa los formularios siguientes para probar los métodos disponibles en el API de artículos. Cada acción genera una
+              petición HTTP hacia el backend configurado y muestra el resultado crudo de la respuesta.
+            </p>
+            <p class="text-xs text-gray-500">
+              Backend configurado: <span id="backend-url-label" class="font-medium text-gray-700">Detectando…</span>
+            </p>
+          </div>
+          <div class="mt-6 grid gap-6 lg:grid-cols-2">
+            <section class="flex flex-col gap-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <header>
+                <h2 class="text-lg font-semibold text-blue-900">Listar artículos</h2>
+                <p class="text-sm text-blue-800">GET /api/articles</p>
+              </header>
+              <button
+                id="list-articles"
+                type="button"
+                class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                Obtener lista
+              </button>
+              <pre
+                id="list-result"
+                class="min-h-[7rem] whitespace-pre-wrap rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-900"
+                aria-live="polite"
+              ></pre>
+            </section>
+
+            <section class="flex flex-col gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <header>
+                <h2 class="text-lg font-semibold text-gray-900">Consultar artículo por ID</h2>
+                <p class="text-sm text-gray-600">GET /api/articles/:id</p>
+              </header>
+              <form id="get-article-form" class="flex flex-col gap-3">
+                <label class="text-sm font-medium text-gray-700" for="get-article-id">Identificador</label>
+                <input
+                  id="get-article-id"
+                  name="articleId"
+                  type="text"
+                  required
+                  class="rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. 123"
+                />
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-700 focus:ring-offset-2"
+                >
+                  Consultar
+                </button>
+              </form>
+              <pre
+                id="get-result"
+                class="min-h-[7rem] whitespace-pre-wrap rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800"
+                aria-live="polite"
+              ></pre>
+            </section>
+
+            <section class="flex flex-col gap-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <header>
+                <h2 class="text-lg font-semibold text-emerald-900">Crear artículo</h2>
+                <p class="text-sm text-emerald-800">POST /api/articles</p>
+              </header>
+              <form id="create-article-form" class="flex flex-col gap-3">
+                <label class="text-sm font-medium text-emerald-900" for="create-article-payload">Payload (JSON)</label>
+                <textarea
+                  id="create-article-payload"
+                  class="h-32 rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder='{
+  "code": "A-100",
+  "name": "Artículo de ejemplo"
+}'
+                ></textarea>
+                <p class="text-xs text-emerald-700">
+                  Si dejas el campo vacío se enviará un objeto vacío <code>{}</code>. Puedes incluir las propiedades que requiera tu API.
+                </p>
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                >
+                  Crear
+                </button>
+              </form>
+              <pre
+                id="create-result"
+                class="min-h-[7rem] whitespace-pre-wrap rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900"
+                aria-live="polite"
+              ></pre>
+            </section>
+
+            <section class="flex flex-col gap-4 rounded-xl border border-amber-100 bg-amber-50/70 p-4">
+              <header>
+                <h2 class="text-lg font-semibold text-amber-900">Actualizar artículo</h2>
+                <p class="text-sm text-amber-800">PUT /api/articles/:id</p>
+              </header>
+              <form id="update-article-form" class="flex flex-col gap-3">
+                <label class="text-sm font-medium text-amber-900" for="update-article-id">Identificador</label>
+                <input
+                  id="update-article-id"
+                  name="articleId"
+                  type="text"
+                  required
+                  class="rounded-lg border border-amber-200 px-3 py-2 text-sm text-amber-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder="e.g. 123"
+                />
+                <label class="text-sm font-medium text-amber-900" for="update-article-payload">Payload (JSON)</label>
+                <textarea
+                  id="update-article-payload"
+                  class="h-32 rounded-lg border border-amber-200 px-3 py-2 text-sm text-amber-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder='{
+  "name": "Artículo actualizado"
+}'
+                ></textarea>
+                <p class="text-xs text-amber-800">
+                  Si no proporcionas datos se enviará un objeto vacío. Incluye solo los campos que desees actualizar.
+                </p>
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-amber-50 shadow-sm transition hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                >
+                  Actualizar
+                </button>
+              </form>
+              <pre
+                id="update-result"
+                class="min-h-[7rem] whitespace-pre-wrap rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900"
+                aria-live="polite"
+              ></pre>
+            </section>
+
+            <section class="flex flex-col gap-4 rounded-xl border border-red-100 bg-red-50 p-4">
+              <header>
+                <h2 class="text-lg font-semibold text-red-900">Eliminar artículo</h2>
+                <p class="text-sm text-red-800">DELETE /api/articles/:id</p>
+              </header>
+              <form id="delete-article-form" class="flex flex-col gap-3">
+                <label class="text-sm font-medium text-red-900" for="delete-article-id">Identificador</label>
+                <input
+                  id="delete-article-id"
+                  name="articleId"
+                  type="text"
+                  required
+                  class="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g. 123"
+                />
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                >
+                  Eliminar
+                </button>
+              </form>
+              <pre
+                id="delete-result"
+                class="min-h-[7rem] whitespace-pre-wrap rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-900"
+                aria-live="polite"
+              ></pre>
+            </section>
+          </div>
         </div>
       </main>
     </div>
-    <script>
-      const sidebar = document.getElementById('sidebar');
-      const toggleButton = document.getElementById('sidebar-toggle');
-      const overlay = document.getElementById('sidebar-overlay');
-
-      const closeSidebar = () => {
-        sidebar.classList.add('-translate-x-full');
-        overlay.classList.add('hidden');
-      };
-
-      const openSidebar = () => {
-        sidebar.classList.remove('-translate-x-full');
-        overlay.classList.remove('hidden');
-      };
-
-      toggleButton?.addEventListener('click', () => {
-        if (sidebar.classList.contains('-translate-x-full')) {
-          openSidebar();
-        } else {
-          closeSidebar();
-        }
-      });
-
-      overlay?.addEventListener('click', closeSidebar);
-    </script>
+    <script src="env.js"></script>
+    <script src="config.js"></script>
+    <script type="module" src="scripts/maestros-articulos.js"></script>
   </body>
 </html>
