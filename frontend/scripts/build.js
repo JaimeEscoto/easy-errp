@@ -21,6 +21,27 @@ const cleanDist = () => {
   fs.mkdirSync(distDir, { recursive: true });
 };
 
+const copyDirectoryRecursive = (sourceDir, destinationDir) => {
+  if (!fs.existsSync(sourceDir)) {
+    return;
+  }
+
+  fs.mkdirSync(destinationDir, { recursive: true });
+
+  const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+
+  entries.forEach((entry) => {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destinationPath = path.join(destinationDir, entry.name);
+
+    if (entry.isDirectory()) {
+      copyDirectoryRecursive(sourcePath, destinationPath);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(sourcePath, destinationPath);
+    }
+  });
+};
+
 const copyFiles = () => {
   const staticFiles = ['app.js', 'config.js', 'styles.css', 'env.js'];
   const htmlFiles = fs
@@ -40,6 +61,8 @@ const copyFiles = () => {
 
     fs.copyFileSync(sourcePath, destinationPath);
   });
+
+  copyDirectoryRecursive(path.join(frontendDir, 'scripts'), path.join(distDir, 'scripts'));
 };
 
 const main = () => {
