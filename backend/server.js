@@ -199,7 +199,9 @@ articulosRouter.delete('/:id', async (req, res) => {
       .select()
       .maybeSingle();
 
-    if (error && error.code !== '42703') {
+    const logicalDeleteFallbackCodes = ['42703', '42883'];
+
+    if (error && !logicalDeleteFallbackCodes.includes(error.code)) {
       console.error('Logical delete articulo error:', error);
       return res
         .status(500)
