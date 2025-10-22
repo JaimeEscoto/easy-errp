@@ -59,6 +59,15 @@ const toggleInactiveButton = document.getElementById('toggle-inactive-third-part
 const totalLabel = document.getElementById('third-parties-total');
 const toastContainer = document.getElementById('toast-container');
 
+const historyModal = document.getElementById('third-party-history-modal');
+const historyCloseButton = document.getElementById('close-third-party-history-modal');
+const historyTitle = document.getElementById('third-party-history-title');
+const historySubtitle = document.getElementById('third-party-history-subtitle');
+const historyTimeline = document.getElementById('third-party-history-timeline');
+const historyLoading = document.getElementById('third-party-history-loading');
+const historyError = document.getElementById('third-party-history-error');
+const historyEmpty = document.getElementById('third-party-history-empty');
+
 const modal = document.getElementById('third-party-modal');
 const modalForm = document.getElementById('third-party-form');
 const modalTitle = document.getElementById('third-party-modal-title');
@@ -79,6 +88,8 @@ const fieldNotas = document.getElementById('third-party-notas');
 let thirdParties = [];
 let isSubmitting = false;
 let includeInactive = true;
+let currentHistoryThirdPartyId = null;
+let historyRequestToken = 0;
 
 const setHidden = (element, hidden) => {
   if (!element) {
@@ -223,6 +234,16 @@ const getThirdPartyPhone = (thirdParty) =>
 const getThirdPartyEmail = (thirdParty) =>
   getFieldValue(thirdParty, ['correo_principal', 'correo', 'correo_electronico', 'email', 'mail']);
 
+const getThirdPartyRecordId = (thirdParty) =>
+  getFieldValue(thirdParty, [
+    'id',
+    'tercero_id',
+    'terceroId',
+    'third_party_id',
+    'thirdPartyId',
+    'uuid',
+  ]);
+
 const getThirdPartyStatus = (thirdParty) => {
   const explicit = getFieldValue(thirdParty, ['estado', 'status']);
   if (typeof explicit === 'string') {
@@ -300,6 +321,211 @@ const getThirdPartyRelation = (thirdParty) => {
   return relationField ?? 'desconocido';
 };
 
+const formatNumber = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return '—';
+  }
+
+  const number = Number(value);
+
+  if (Number.isNaN(number)) {
+    return String(value);
+  }
+
+  return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 }).format(number);
+};
+
+const formatDateTime = (value) => {
+  if (!value) {
+    return '—';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+};
+
+const getHistoryTimestamp = (entry) => {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    'created_at',
+    'creado_en',
+    'inserted_at',
+    'createdAt',
+    'creadoEn',
+    'fecha',
+    'fecha_creacion',
+    'fechaCreacion',
+    'timestamp',
+    'registrado_en',
+  ];
+
+  for (const key of candidates) {
+    const value = entry[key];
+    if (!value) {
+      continue;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  return null;
+};
+
+const formatHistoryValue = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return '—';
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Sí' : 'No';
+  }
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch (_err) {
+      return String(value);
+    }
+  }
+
+  return String(value);
+};
+
+const formatHistoryFieldValue = (field, value) => {
+  if (value === undefined || value === null || value === '') {
+    return '—';
+  }
+
+  if (field === 'activo') {
+    const interpreted = interpretBoolean(value, null);
+    if (interpreted === null) {
+      return formatHistoryValue(value);
+    }
+    return interpreted ? 'Activo' : 'Inactivo';
+  }
+
+  if (['es_cliente', 'es_proveedor'].includes(field)) {
+    const interpreted = interpretBoolean(value, null);
+    if (interpreted === null) {
+      return formatHistoryValue(value);
+    }
+    return interpreted ? 'Sí' : 'No';
+  }
+
+  if (['tipo_relacion', 'relacion'].includes(field)) {
+    const normalized = normalizeRelation(value);
+    if (normalized === 'cliente') {
+      return 'Cliente';
+    }
+    if (normalized === 'proveedor') {
+      return 'Proveedor';
+    }
+    if (normalized === 'ambos') {
+      return 'Cliente · Proveedor';
+    }
+  }
+
+  if (field === 'estado') {
+    const label = String(value).trim();
+    if (!label) {
+      return '—';
+    }
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  return formatHistoryValue(value);
+};
+
+const extractHistoryActor = (entry) => {
+  const candidates = [
+    'realizado_por_nombre',
+    'realizado_por_label',
+    'realizado_por',
+    'actor_id',
+    'updated_by',
+    'modificado_por',
+    'created_by',
+    'admin_id',
+    'usuario',
+    'user_id',
+  ];
+
+  for (const key of candidates) {
+    const value = entry?.[key];
+    if (value !== undefined && value !== null && value !== '') {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const normalizeHistoryChanges = (entry) => {
+  const rawChanges = entry?.cambios ?? entry?.changes ?? null;
+  let parsedChanges = rawChanges;
+
+  if (typeof rawChanges === 'string') {
+    try {
+      parsedChanges = JSON.parse(rawChanges);
+    } catch (_err) {
+      parsedChanges = null;
+    }
+  }
+
+  if (!parsedChanges || typeof parsedChanges !== 'object') {
+    return [];
+  }
+
+  return Object.entries(parsedChanges).map(([field, detail]) => {
+    if (detail && typeof detail === 'object') {
+      const before = detail.before ?? detail.antes ?? detail.prev ?? detail.previous ?? null;
+      const after = detail.after ?? detail.despues ?? detail.next ?? detail.nuevo ?? null;
+      return { field, before, after };
+    }
+
+    return { field, before: null, after: detail };
+  });
+};
+
+const describeHistoryAction = (action) => {
+  const normalized = typeof action === 'string' ? action.trim().toLowerCase() : '';
+
+  switch (normalized) {
+    case 'create':
+    case 'crear':
+    case 'creado':
+      return { label: 'Creación', className: 'bg-emerald-100 text-emerald-700' };
+    case 'update':
+    case 'actualizar':
+    case 'updated':
+      return { label: 'Actualización', className: 'bg-blue-100 text-blue-700' };
+    case 'disable':
+    case 'desactivar':
+    case 'inactive':
+      return { label: 'Desactivación', className: 'bg-red-100 text-red-700' };
+    case 'enable':
+    case 'activar':
+    case 'active':
+      return { label: 'Activación', className: 'bg-amber-100 text-amber-700' };
+    default:
+      return { label: action ? action : 'Evento', className: 'bg-gray-100 text-gray-600' };
+  }
+};
+
 const updateTotalLabel = (count) => {
   if (!totalLabel) {
     return;
@@ -365,7 +591,10 @@ const renderThirdParties = (items) => {
   const fragment = document.createDocumentFragment();
 
   items.forEach((thirdParty) => {
-    const identificacion = getThirdPartyIdentification(thirdParty) ?? '—';
+    const recordId = getThirdPartyRecordId(thirdParty);
+    const rawIdentificacion = getThirdPartyIdentification(thirdParty);
+    const identificacion = rawIdentificacion ?? '—';
+    const identifier = recordId ?? rawIdentificacion;
     const nombre = getThirdPartyName(thirdParty) ?? '—';
     const subtitle = getThirdPartySubtitle(thirdParty, nombre);
     const telefono = getThirdPartyPhone(thirdParty) ?? '—';
@@ -373,8 +602,19 @@ const renderThirdParties = (items) => {
     const status = getThirdPartyStatus(thirdParty);
     const relation = getThirdPartyRelation(thirdParty);
 
+    const hasIdentifier = identifier !== null && identifier !== undefined && identifier !== '';
+    const disabledClass = hasIdentifier ? '' : 'opacity-60 cursor-not-allowed pointer-events-none';
+
     const row = document.createElement('tr');
-    row.className = 'transition-colors hover:bg-blue-50/40';
+    row.className = 'transition-colors';
+    if (hasIdentifier) {
+      row.classList.add('hover:bg-blue-50/40', 'cursor-pointer');
+      row.dataset.identifier = String(identifier);
+      row.title = 'Haz clic para ver el historial de cambios';
+    } else {
+      row.classList.add('opacity-60');
+    }
+
     row.innerHTML = `
       <td class="px-4 py-4 font-medium text-gray-900">${identificacion}</td>
       <td class="px-4 py-4">
@@ -405,7 +645,19 @@ const renderThirdParties = (items) => {
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200"
+            class="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm transition hover:bg-blue-100 ${disabledClass}"
+            data-action="history"
+            data-id="${hasIdentifier ? String(identifier) : ''}"
+            ${hasIdentifier ? '' : 'disabled'}
+          >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 5a1 1 0 10-2 0v5a1 1 0 00.293.707l3 3a1 1 0 101.414-1.414L13 11.586V7z" />
+            </svg>
+            Historial
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200 ${disabledClass}"
             disabled
           >
             ${status === 'activo' ? 'Inactivar' : 'Activar'}
@@ -424,9 +676,226 @@ const renderThirdParties = (items) => {
   updateTotalLabel(items.length);
 };
 
+const resetHistoryModalState = () => {
+  if (historyTimeline) {
+    historyTimeline.innerHTML = '';
+  }
+
+  setHidden(historyLoading, true);
+  setHidden(historyError, true);
+  setHidden(historyEmpty, true);
+};
+
+const renderHistoryEntries = (entries) => {
+  if (!historyTimeline) {
+    return;
+  }
+
+  historyTimeline.innerHTML = '';
+
+  if (!Array.isArray(entries) || !entries.length) {
+    setHidden(historyEmpty, false);
+    return;
+  }
+
+  setHidden(historyEmpty, true);
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    const dateA = getHistoryTimestamp(a);
+    const dateB = getHistoryTimestamp(b);
+    const timeA = dateA ? dateA.getTime() : 0;
+    const timeB = dateB ? dateB.getTime() : 0;
+    return timeB - timeA;
+  });
+
+  const fragment = document.createDocumentFragment();
+
+  sortedEntries.forEach((entry) => {
+    const actionInfo = describeHistoryAction(entry?.accion ?? entry?.action);
+    const timestamp = getHistoryTimestamp(entry);
+    const actor = extractHistoryActor(entry);
+    const note =
+      entry?.descripcion ?? entry?.detalle ?? entry?.nota ?? entry?.comentario ?? entry?.comment ?? null;
+    const changes = normalizeHistoryChanges(entry);
+
+    const item = document.createElement('li');
+    item.className = 'relative rounded-2xl border border-gray-200 bg-white p-4 shadow-sm';
+
+    const header = document.createElement('div');
+    header.className = 'flex flex-wrap items-center justify-between gap-3';
+
+    const badge = document.createElement('span');
+    badge.className = `inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${actionInfo.className}`;
+    badge.textContent = actionInfo.label;
+
+    const timeLabel = document.createElement('span');
+    timeLabel.className = 'text-xs text-gray-500';
+    timeLabel.textContent = timestamp ? formatDateTime(timestamp) : 'Fecha no disponible';
+
+    header.appendChild(badge);
+    header.appendChild(timeLabel);
+    item.appendChild(header);
+
+    const actorLabel = document.createElement('p');
+    actorLabel.className = 'mt-2 text-sm text-gray-600';
+    actorLabel.textContent = actor ? `Registrado por ${String(actor)}.` : 'Usuario no identificado.';
+    item.appendChild(actorLabel);
+
+    if (note) {
+      const noteParagraph = document.createElement('p');
+      noteParagraph.className = 'mt-2 text-sm text-gray-700';
+      noteParagraph.textContent = String(note);
+      item.appendChild(noteParagraph);
+    }
+
+    if (changes.length) {
+      const changeList = document.createElement('ul');
+      changeList.className = 'mt-3 space-y-1 text-xs text-gray-600';
+
+      changes.forEach(({ field, before, after }) => {
+        const changeItem = document.createElement('li');
+        changeItem.innerHTML = `
+          <span class="font-medium text-gray-700">${field}</span>
+          <span class="text-gray-500">${formatHistoryFieldValue(field, before)}</span>
+          <span class="px-1 text-gray-400">→</span>
+          <span class="text-gray-700">${formatHistoryFieldValue(field, after)}</span>
+        `;
+        changeList.appendChild(changeItem);
+      });
+
+      item.appendChild(changeList);
+    } else {
+      const noChanges = document.createElement('p');
+      noChanges.className = 'mt-3 text-xs text-gray-500';
+      noChanges.textContent = 'No se registraron cambios específicos en este evento.';
+      item.appendChild(noChanges);
+    }
+
+    fragment.appendChild(item);
+  });
+
+  historyTimeline.appendChild(fragment);
+};
+
+const openHistoryModalForThirdParty = (thirdParty) => {
+  if (!historyModal) {
+    return;
+  }
+
+  if (!thirdParty) {
+    showToast('No se encontró la información del tercero seleccionado.', 'error');
+    return;
+  }
+
+  const recordId = getThirdPartyRecordId(thirdParty);
+  const identificacion = getThirdPartyIdentification(thirdParty);
+  const nombre = getThirdPartyName(thirdParty);
+  const subtitleParts = [identificacion, nombre].filter(Boolean);
+
+  if (!recordId && !identificacion) {
+    showToast('No fue posible determinar el identificador del tercero.', 'error');
+    return;
+  }
+
+  if (historyTitle) {
+    historyTitle.textContent = 'Historial de cambios';
+  }
+
+  if (historySubtitle) {
+    historySubtitle.textContent = subtitleParts.length
+      ? subtitleParts.join(' · ')
+      : `ID interno: ${recordId ?? identificacion}`;
+  }
+
+  currentHistoryThirdPartyId = String(recordId ?? identificacion);
+  resetHistoryModalState();
+  setHidden(historyLoading, false);
+
+  historyModal?.classList.remove('hidden');
+  historyModal?.classList.add('flex');
+  updateBodyScrollLock();
+
+  const requestId = ++historyRequestToken;
+  loadThirdPartyHistory(currentHistoryThirdPartyId, requestId);
+};
+
+const closeHistoryModal = () => {
+  if (!historyModal) {
+    return;
+  }
+
+  historyModal.classList.add('hidden');
+  historyModal.classList.remove('flex');
+  resetHistoryModalState();
+  currentHistoryThirdPartyId = null;
+
+  if (historySubtitle) {
+    historySubtitle.textContent = '';
+  }
+
+  updateBodyScrollLock();
+};
+
+const loadThirdPartyHistory = async (identifier, requestId) => {
+  const result = await request('GET', `/${encodeURIComponent(identifier)}/historial`);
+
+  if (requestId !== historyRequestToken) {
+    return;
+  }
+
+  setHidden(historyLoading, true);
+
+  if (!result.ok) {
+    const message =
+      result?.data?.message ||
+      result?.error ||
+      'No fue posible obtener el historial de este tercero. Intenta nuevamente más tarde.';
+
+    if (historyError) {
+      historyError.textContent = message;
+      setHidden(historyError, false);
+    }
+
+    return;
+  }
+
+  const entries = Array.isArray(result.data) ? result.data : [];
+  renderHistoryEntries(entries);
+};
+
+const openHistoryForIdentifier = (identifier) => {
+  if (!identifier) {
+    showToast('No fue posible determinar el tercero seleccionado.', 'error');
+    return;
+  }
+
+  const target = thirdParties.find((item) => {
+    const recordId = getThirdPartyRecordId(item);
+    if (recordId !== undefined && recordId !== null && String(recordId) === String(identifier)) {
+      return true;
+    }
+
+    const taxId = getThirdPartyIdentification(item);
+    if (taxId !== undefined && taxId !== null && String(taxId) === String(identifier)) {
+      return true;
+    }
+
+    return false;
+  });
+
+  if (!target) {
+    showToast('No se encontró la información del tercero seleccionado.', 'error');
+    return;
+  }
+
+  openHistoryModalForThirdParty(target);
+};
+
 const updateBodyScrollLock = () => {
   const modalOpen = modal?.classList.contains('flex');
-  if (modalOpen) {
+  const historyOpen = historyModal?.classList.contains('flex');
+
+  if (modalOpen || historyOpen) {
     document.body.classList.add('overflow-hidden');
   } else {
     document.body.classList.remove('overflow-hidden');
@@ -781,8 +1250,21 @@ modal?.addEventListener('click', (event) => {
   }
 });
 
+historyCloseButton?.addEventListener('click', closeHistoryModal);
+
+historyModal?.addEventListener('click', (event) => {
+  if (event.target === historyModal) {
+    closeHistoryModal();
+  }
+});
+
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    if (historyModal?.classList.contains('flex')) {
+      closeHistoryModal();
+      return;
+    }
+
     closeModal();
   }
 });
@@ -838,6 +1320,34 @@ toggleInactiveButton?.addEventListener('click', () => {
 
   updateToggleInactiveButton();
   applyFilters();
+});
+
+tableBody?.addEventListener('click', (event) => {
+  const actionButton = event.target.closest('[data-action]');
+  if (actionButton) {
+    const action = actionButton.getAttribute('data-action');
+    const identifier = actionButton.getAttribute('data-id');
+
+    if (action === 'history') {
+      openHistoryForIdentifier(identifier);
+    }
+
+    return;
+  }
+
+  const row = event.target.closest('tr');
+
+  if (!row) {
+    return;
+  }
+
+  const identifier = row.dataset.identifier;
+
+  if (!identifier) {
+    return;
+  }
+
+  openHistoryForIdentifier(identifier);
 });
 
 updateToggleInactiveButton();
