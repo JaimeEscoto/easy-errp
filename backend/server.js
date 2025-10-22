@@ -30,6 +30,12 @@ const supabaseClient =
 const ARTICULOS_TABLE = 'articulos';
 const ARTICULOS_LOG_TABLE_CANDIDATES = ['articulos_log', 'articulos_logs'];
 const TERCEROS_TABLE = 'terceros';
+const TERCEROS_LOG_TABLE_CANDIDATES = [
+  'terceros_log',
+  'terceros_logs',
+  'terceros_historial',
+  'terceros_history',
+];
 
 const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') {
@@ -169,6 +175,24 @@ const TRACKED_FIELDS = [
   'updated_by',
 ];
 
+const TERCEROS_TRACKED_FIELDS = [
+  'identificacion_fiscal',
+  'nombre_comercial',
+  'razon_social',
+  'correo_principal',
+  'telefono_principal',
+  'tipo_relacion',
+  'relacion',
+  'es_cliente',
+  'es_proveedor',
+  'activo',
+  'estado',
+  'notas',
+  'notas_internas',
+  'created_by',
+  'updated_by',
+];
+
 const computeArticuloChanges = (previousData = {}, newData = {}) => {
   const relevantKeys = new Set([
     ...TRACKED_FIELDS,
@@ -180,6 +204,37 @@ const computeArticuloChanges = (previousData = {}, newData = {}) => {
 
   for (const key of relevantKeys) {
     if (!TRACKED_FIELDS.includes(key)) {
+      continue;
+    }
+
+    const previousValue = previousData?.[key];
+    const newValue = newData?.[key];
+
+    const normalizedPrevious = previousValue === undefined ? null : previousValue;
+    const normalizedNew = newValue === undefined ? null : newValue;
+
+    if (JSON.stringify(normalizedPrevious) !== JSON.stringify(normalizedNew)) {
+      changes[key] = {
+        before: normalizedPrevious,
+        after: normalizedNew,
+      };
+    }
+  }
+
+  return changes;
+};
+
+const computeTerceroChanges = (previousData = {}, newData = {}) => {
+  const relevantKeys = new Set([
+    ...TERCEROS_TRACKED_FIELDS,
+    ...Object.keys(previousData ?? {}),
+    ...Object.keys(newData ?? {}),
+  ]);
+
+  const changes = {};
+
+  for (const key of relevantKeys) {
+    if (!TERCEROS_TRACKED_FIELDS.includes(key)) {
       continue;
     }
 
@@ -331,6 +386,50 @@ const formatActorLabel = (actorId, actorName) => {
   }
 
   return null;
+};
+
+const recordTerceroLog = async ({
+  terceroId,
+  action,
+  actorId = null,
+  actorName = null,
+  previousData = null,
+  newData = null,
+  changes = null,
+}) => {
+  if (!supabaseClient) {
+    return;
+  }
+
+  const sanitizedChanges = changes && Object.keys(changes).length ? changes : null;
+
+  const payload = {
+    tercero_id: terceroId ?? null,
+    accion: action,
+    realizado_por: formatActorLabel(actorId, actorName),
+    datos_previos: previousData,
+    datos_nuevos: newData,
+    cambios: sanitizedChanges,
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+
+  for (const table of TERCEROS_LOG_TABLE_CANDIDATES) {
+    const { error } = await supabaseClient.from(table).insert([cleanedPayload]);
+
+    if (!error) {
+      return;
+    }
+
+    if (error?.code !== '42P01') {
+      console.error(`Record tercero log error on table ${table}:`, error);
+      return;
+    }
+  }
+
+  console.error('Record tercero log error: none of the expected third-party log tables are available.');
 };
 
 const recordArticuloLog = async ({
@@ -514,6 +613,49 @@ tercerosRouter.get('/', async (_req, res) => {
   }
 });
 
+tercerosRouter.get('/:id/historial', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    let lastMissingTableError = null;
+
+    for (const table of TERCEROS_LOG_TABLE_CANDIDATES) {
+      const { data, error } = await supabaseClient
+        .from(table)
+        .select('*')
+        .eq('tercero_id', id);
+
+      if (!error) {
+        return res.json(data ?? []);
+      }
+
+      if (error.code === '42P01') {
+        lastMissingTableError = error;
+        continue;
+      }
+
+      console.error(`List tercero history error on table ${table}:`, error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching third-party history.', error));
+    }
+
+    if (lastMissingTableError) {
+      console.error('Tercero history error: log tables are missing.');
+    }
+
+    return res.status(404).json({
+      message: 'Historial no disponible. Configura la tabla de auditoría para visualizar los cambios.',
+      candidates: TERCEROS_LOG_TABLE_CANDIDATES,
+    });
+  } catch (err) {
+    console.error('Unhandled list tercero history error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching third-party history.', err));
+  }
+});
+
 tercerosRouter.post('/', async (req, res) => {
   try {
     const incoming = req.body ?? {};
@@ -555,6 +697,18 @@ tercerosRouter.post('/', async (req, res) => {
       return res
         .status(500)
         .json(formatUnexpectedErrorResponse('Unexpected error while creating third party.', error));
+    }
+
+    if (data) {
+      await recordTerceroLog({
+        terceroId: data?.id ?? data?.tercero_id ?? null,
+        action: 'create',
+        actorId,
+        actorName,
+        previousData: null,
+        newData: data,
+        changes: computeTerceroChanges({}, data),
+      });
     }
 
     return res.status(201).json(data);
