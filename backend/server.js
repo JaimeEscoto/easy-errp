@@ -29,6 +29,7 @@ const supabaseClient =
 
 const ARTICULOS_TABLE = 'articulos';
 const ARTICULOS_LOG_TABLE_CANDIDATES = ['articulos_log', 'articulos_logs'];
+const TERCEROS_TABLE = 'terceros';
 
 const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') {
@@ -197,6 +198,120 @@ const computeArticuloChanges = (previousData = {}, newData = {}) => {
   }
 
   return changes;
+};
+
+const normalizeRelationType = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_\-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  if (
+    [
+      'cliente proveedor',
+      'cliente y proveedor',
+      'cliente proveedor',
+      'cliente · proveedor',
+      'cliente proveedor',
+      'ambos',
+      'both',
+    ].includes(normalized)
+  ) {
+    return 'ambos';
+  }
+
+  if (['cliente', 'client'].includes(normalized)) {
+    return 'cliente';
+  }
+
+  if (['proveedor', 'supplier'].includes(normalized)) {
+    return 'proveedor';
+  }
+
+  return normalized || null;
+};
+
+const sanitizeThirdPartyPayloadForInsert = (input = {}) => {
+  const payload = {};
+
+  Object.entries(input).forEach(([key, value]) => {
+    if (value === undefined) {
+      return;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      payload[key] = trimmed.length ? trimmed : null;
+      return;
+    }
+
+    payload[key] = value;
+  });
+
+  if (!payload.identificacion_fiscal) {
+    payload.identificacion_fiscal = payload.nit ?? payload.numero_identificacion ?? null;
+  }
+
+  if (!payload.nombre_comercial) {
+    payload.nombre_comercial = payload.nombre ?? payload.razon_social ?? null;
+  }
+
+  const relation = normalizeRelationType(payload.tipo_relacion ?? payload.relacion);
+  let isClient = normalizeBoolean(payload.es_cliente);
+  let isSupplier = normalizeBoolean(payload.es_proveedor);
+
+  if (relation === 'cliente') {
+    isClient = true;
+    isSupplier = false;
+  } else if (relation === 'proveedor') {
+    isClient = false;
+    isSupplier = true;
+  } else if (relation === 'ambos') {
+    isClient = true;
+    isSupplier = true;
+  }
+
+  if (isClient === null) {
+    isClient = relation === 'cliente' || relation === 'ambos';
+  }
+
+  if (isSupplier === null) {
+    isSupplier = relation === 'proveedor' || relation === 'ambos';
+  }
+
+  if (relation) {
+    payload.tipo_relacion = relation;
+    payload.relacion = relation;
+  }
+
+  payload.es_cliente = isClient ?? false;
+  payload.es_proveedor = isSupplier ?? false;
+
+  const activoNormalized = normalizeBoolean(payload.activo);
+
+  if (activoNormalized !== null) {
+    payload.activo = activoNormalized;
+  }
+
+  if (!payload.estado) {
+    payload.estado = activoNormalized === false ? 'inactivo' : 'activo';
+  } else if (typeof payload.estado === 'string') {
+    const estadoNormalized = payload.estado.trim().toLowerCase();
+    if (['inactivo', 'inactive', 'inactiva', 'deshabilitado'].includes(estadoNormalized)) {
+      payload.estado = 'inactivo';
+    } else {
+      payload.estado = 'activo';
+    }
+  }
+
+  return payload;
 };
 
 const formatActorLabel = (actorId, actorName) => {
@@ -374,6 +489,82 @@ const ensureSupabaseConfigured = (_req, res, next) => {
 
   next();
 };
+
+const tercerosRouter = express.Router();
+
+tercerosRouter.use(ensureSupabaseConfigured);
+
+tercerosRouter.get('/', async (_req, res) => {
+  try {
+    const { data, error } = await supabaseClient.from(TERCEROS_TABLE).select('*');
+
+    if (error) {
+      console.error('List terceros error:', error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching third parties.', error));
+    }
+
+    return res.json(data ?? []);
+  } catch (err) {
+    console.error('Unhandled list terceros error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching third parties.', err));
+  }
+});
+
+tercerosRouter.post('/', async (req, res) => {
+  try {
+    const incoming = req.body ?? {};
+    const actorId = extractActorId(req, incoming);
+    const actorName = extractActorName(req, incoming);
+    const payload = sanitizeThirdPartyPayloadForInsert({ ...incoming });
+
+    if (!payload.identificacion_fiscal) {
+      return res.status(400).json({ message: 'La identificación fiscal es obligatoria.' });
+    }
+
+    if (!payload.nombre_comercial) {
+      return res.status(400).json({ message: 'El nombre comercial es obligatorio.' });
+    }
+
+    const timestamp = new Date().toISOString();
+
+    if (actorId !== null && actorId !== undefined) {
+      payload.created_by = actorId;
+      payload.creado_por = actorId;
+      payload.updated_by = actorId;
+      payload.modificado_por = actorId;
+    }
+
+    if (actorName) {
+      payload.created_by_name = actorName;
+      payload.creado_por_nombre = actorName;
+      payload.updated_by_name = actorName;
+      payload.modificado_por_nombre = actorName;
+    }
+
+    payload.creado_en = payload.creado_en ?? timestamp;
+    payload.modificado_en = timestamp;
+
+    const { data, error } = await supabaseClient.from(TERCEROS_TABLE).insert([payload]).select().maybeSingle();
+
+    if (error) {
+      console.error('Create tercero error:', error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating third party.', error));
+    }
+
+    return res.status(201).json(data);
+  } catch (err) {
+    console.error('Unhandled create tercero error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while creating third party.', err));
+  }
+});
 
 const articulosRouter = express.Router();
 
@@ -693,6 +884,7 @@ articulosRouter.delete('/:id', async (req, res) => {
   }
 });
 
+app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
 
 app.post('/api/login', async (req, res) => {

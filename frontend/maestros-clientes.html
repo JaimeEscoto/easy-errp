@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="min-h-screen bg-gray-100 text-gray-800">
-    <header class="sticky top-0 z-30 bg-gray-50 border-b border-gray-200">
+    <header class="sticky top-0 z-30 border-b border-gray-200 bg-gray-50">
       <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
         <button
           id="sidebar-toggle"
@@ -20,14 +20,12 @@
         </button>
         <div class="flex items-center gap-2">
           <svg class="h-7 w-7 text-blue-700" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path
-              d="M12 2a10 10 0 100 20 10 10 0 000-20Zm0 3a7 7 0 110 14 7 7 0 010-14Zm0 2.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z"
-            />
+            <path d="M12 2a10 10 0 100 20 10 10 0 000-20Zm0 3a7 7 0 110 14 7 7 0 010-14Zm0 2.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z" />
           </svg>
           <span class="text-lg font-bold tracking-tight text-blue-800">Easy ERP</span>
         </div>
         <div class="ml-auto flex items-center gap-4">
-          <div class="hidden sm:block text-sm text-gray-600">
+          <div class="hidden text-sm text-gray-600 sm:block">
             Hola, <span class="font-medium" data-user-display>Juan Pérez</span>
           </div>
           <a
@@ -37,9 +35,7 @@
             data-logout
           >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path
-                d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-8a2 2 0 00-2 2v4h2V5h8v14h-8v-4h-2v4a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2z"
-              />
+              <path d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-8a2 2 0 00-2 2v4h2V5h8v14h-8v-4h-2v4a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2z" />
             </svg>
             Cerrar Sesión
           </a>
@@ -49,7 +45,7 @@
     <div class="mx-auto grid max-w-7xl grid-cols-1 lg:grid-cols-[240px_1fr]">
       <aside
         id="sidebar"
-        class="fixed inset-y-0 left-0 z-20 w-64 -translate-x-full transform bg-gray-900 text-gray-100 transition-transform duration-200 ease-out lg:static lg:translate-x-0 lg:w-[240px]"
+        class="fixed inset-y-0 left-0 z-20 w-64 -translate-x-full transform bg-gray-900 text-gray-100 transition-transform duration-200 ease-out lg:static lg:w-[240px] lg:translate-x-0"
         aria-label="Barra de navegación lateral"
       >
         <nav class="flex h-full flex-col gap-2 p-3">
@@ -64,7 +60,7 @@
           </a>
           <div>
             <button
-              class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm bg-blue-600 text-white"
+              class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white"
               disabled
             >
               <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -91,9 +87,7 @@
               disabled
             >
               <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path
-                  d="M9 2h6a2 2 0 012 2v2h3a2 2 0 012 2v3H2V8a2 2 0 012-2h3V4a2 2 0 012-2zm1 4V4h4v2h-4zM2 12h22v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6z"
-                />
+                <path d="M9 2h6a2 2 0 012 2v2h3a2 2 0 012 2v3H2V8a2 2 0 012-2h3V4a2 2 0 012-2zm1 4V4h4v2h-4zM2 12h22v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6z" />
               </svg>
               <span class="font-medium">Transacciones</span>
             </button>
@@ -118,354 +112,309 @@
       </aside>
       <div id="sidebar-overlay" class="fixed inset-0 z-10 hidden bg-black/30 lg:hidden"></div>
       <main class="p-4 sm:p-6 lg:p-8">
-        <div class="space-y-6">
-          <section class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200/60">
-            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Gestión de Terceros</p>
-                <h1 class="mt-1 text-2xl font-semibold text-gray-900">Gestión de Clientes y Proveedores</h1>
-                <p class="mt-1 max-w-2xl text-sm text-gray-500">
-                  Consulta y administra el maestro de terceros desde un panel simple y organizado.
-                </p>
+        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div class="flex flex-col gap-4 border-b border-gray-200 pb-6 lg:flex-row lg:items-center lg:justify-between">
+            <div class="space-y-2 text-left">
+              <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                <span class="h-2 w-2 rounded-full bg-blue-500"></span>
+                Panel operativo
+              </div>
+              <h1 class="text-3xl font-semibold leading-tight text-gray-900">Gestión de clientes y proveedores</h1>
+              <p class="max-w-2xl text-sm text-gray-600">
+                Administra el maestro de terceros con un diseño consistente al catálogo de artículos. Consulta, filtra y registra
+                nuevos clientes o proveedores en cuestión de segundos.
+              </p>
+            </div>
+            <div class="flex flex-col gap-3 text-sm text-gray-600 sm:flex-row sm:items-center">
+              <div class="sm:text-right">
+                <p class="font-medium text-gray-800">Backend configurado</p>
+                <p id="backend-url-label" class="truncate text-sm text-gray-500">Detectando…</p>
               </div>
               <button
-                class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                id="add-third-party-button"
                 type="button"
+                class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12 5a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H6a1 1 0 110-2h5V6a1 1 0 011-1z" />
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M11 3a1 1 0 012 0v8h8a1 1 0 010 2h-8v8a1 1 0 01-2 0v-8H3a1 1 0 010-2h8V3z" />
                 </svg>
-                Nuevo Tercero
+                Nuevo tercero
               </button>
             </div>
-            <form class="mt-6 space-y-4">
-              <div class="grid gap-4 md:grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))]">
-                <div class="md:col-span-2">
-                  <label class="mb-1 block text-xs font-medium text-gray-500" for="search">Buscar Tercero</label>
-                  <div class="relative">
-                    <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path
-                          d="M10 2a8 8 0 105.292 14.292l4.207 4.207a1 1 0 001.415-1.415l-4.207-4.207A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z"
-                        />
-                      </svg>
-                    </span>
-                    <input
-                      id="search"
-                      type="text"
-                      name="search"
-                      placeholder="Buscar por Nombre o Identificación Fiscal/NIT"
-                      class="w-full rounded-xl border border-gray-200 bg-gray-50 px-10 py-2.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          </div>
+
+          <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div class="w-full max-w-2xl space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700" for="third-party-search">Buscar en el maestro</label>
+                <div
+                  class="mt-1 flex items-center gap-2 rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500"
+                >
+                  <svg class="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path
+                      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 5L20.5 19l-5-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
                     />
-                  </div>
+                  </svg>
+                  <input
+                    id="third-party-search"
+                    type="search"
+                    placeholder="Buscar por NIT, nombre o correo"
+                    class="w-full border-0 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none"
+                  />
                 </div>
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-gray-500" for="tipo">Tipo de Tercero</label>
+                <p class="mt-2 text-xs text-gray-500">El listado se actualiza automáticamente mientras escribes.</p>
+              </div>
+              <form id="third-party-filters-form" class="grid gap-4 sm:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium text-gray-500" for="third-party-type-filter">Tipo de tercero</label>
                   <select
-                    id="tipo"
+                    id="third-party-type-filter"
                     name="tipo"
-                    class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    class="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   >
-                    <option>Ambos</option>
-                    <option>Cliente</option>
-                    <option>Proveedor</option>
+                    <option value="todos">Ambos</option>
+                    <option value="cliente">Cliente</option>
+                    <option value="proveedor">Proveedor</option>
+                    <option value="ambos">Cliente · Proveedor</option>
                   </select>
                 </div>
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-gray-500" for="estado">Estado</label>
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium text-gray-500" for="third-party-status-filter">Estado</label>
                   <select
-                    id="estado"
+                    id="third-party-status-filter"
                     name="estado"
-                    class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    class="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   >
-                    <option>Activo</option>
-                    <option>Inactivo</option>
+                    <option value="todos">Activos e inactivos</option>
+                    <option value="activo">Solo activos</option>
+                    <option value="inactivo">Solo inactivos</option>
                   </select>
                 </div>
-                <div class="flex items-end gap-2">
-                  <button
-                    type="submit"
-                    class="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  >
-                    Buscar
-                  </button>
-                  <button
-                    type="reset"
-                    class="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  >
-                    Limpiar Filtros
-                  </button>
-                </div>
-              </div>
-            </form>
-          </section>
-          <section class="rounded-3xl bg-white shadow-sm ring-1 ring-gray-200/60">
-            <div class="overflow-hidden rounded-3xl">
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-left">
-                  <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                    <tr>
-                      <th scope="col" class="px-6 py-3 font-semibold">Identificación Fiscal (NIT/RUC)</th>
-                      <th scope="col" class="px-6 py-3 font-semibold">Nombre Comercial</th>
-                      <th scope="col" class="px-6 py-3 font-semibold">Teléfono Principal</th>
-                      <th scope="col" class="px-6 py-3 font-semibold">Correo</th>
-                      <th scope="col" class="px-6 py-3 font-semibold">Tipo de Relación</th>
-                      <th scope="col" class="px-6 py-3 font-semibold">Estado</th>
-                      <th scope="col" class="px-6 py-3 font-semibold">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 text-sm text-gray-700">
-                    <tr class="hover:bg-blue-50/50">
-                      <td class="px-6 py-4 font-medium text-gray-900">08011985123456</td>
-                      <td class="px-6 py-4">
-                        <div class="font-medium text-gray-900">Comercial Andina S.A.</div>
-                        <p class="text-xs text-gray-500">Cliente estratégico en retail</p>
-                      </td>
-                      <td class="px-6 py-4">+504 2234-5566</td>
-                      <td class="px-6 py-4">
-                        <a href="mailto:contacto@andina.com" class="text-blue-600 hover:underline">contacto@andina.com</a>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-                          <span class="h-2 w-2 rounded-full bg-blue-500"></span>
-                          Cliente
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
-                          <span class="h-2 w-2 rounded-full bg-green-500"></span>
-                          Activo
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-2">
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-                          >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                              <path d="M5 4h14a1 1 0 011 1v2H4V5a1 1 0 011-1zm-1 6h16l-1.2 9.6a1 1 0 01-.99.9H6.19a1 1 0 01-.99-.9L4 10zm7 2v6h2v-6h-2z" />
-                            </svg>
-                            Editar
-                          </button>
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200"
-                          >
-                            Inactivar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/50">
-                      <td class="px-6 py-4 font-medium text-gray-900">08011999123457</td>
-                      <td class="px-6 py-4">
-                        <div class="font-medium text-gray-900">Servicios del Norte</div>
-                        <p class="text-xs text-gray-500">Proveedor de servicios logísticos</p>
-                      </td>
-                      <td class="px-6 py-4">+504 2300-9832</td>
-                      <td class="px-6 py-4">
-                        <a href="mailto:ventas@sumisur.com" class="text-blue-600 hover:underline">ventas@sumisur.com</a>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-600">
-                          <span class="h-2 w-2 rounded-full bg-amber-500"></span>
-                          Proveedor
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
-                          <span class="h-2 w-2 rounded-full bg-green-500"></span>
-                          Activo
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-2">
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-                          >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                              <path d="M5 4h14a1 1 0 011 1v2H4V5a1 1 0 011-1zm-1 6h16l-1.2 9.6a1 1 0 01-.99.9H6.19a1 1 0 01-.99-.9L4 10zm7 2v6h2v-6h-2z" />
-                            </svg>
-                            Editar
-                          </button>
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200"
-                          >
-                            Inactivar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/50">
-                      <td class="px-6 py-4 font-medium text-gray-900">08011977123458</td>
-                      <td class="px-6 py-4">
-                        <div class="font-medium text-gray-900">AgroExport HN</div>
-                        <p class="text-xs text-gray-500">Exportador certificado de productos</p>
-                      </td>
-                      <td class="px-6 py-4">+504 2299-7711</td>
-                      <td class="px-6 py-4">
-                        <a href="mailto:info@agroexport.hn" class="text-blue-600 hover:underline">info@agroexport.hn</a>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-                          <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-                          Cliente · Proveedor
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
-                          <span class="h-2 w-2 rounded-full bg-green-500"></span>
-                          Activo
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-2">
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-                          >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                              <path d="M5 4h14a1 1 0 011 1v2H4V5a1 1 0 011-1zm-1 6h16l-1.2 9.6a1 1 0 01-.99.9H6.19a1 1 0 01-.99-.9L4 10zm7 2v6h2v-6h-2z" />
-                            </svg>
-                            Editar
-                          </button>
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200"
-                          >
-                            Inactivar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/50">
-                      <td class="px-6 py-4 font-medium text-gray-900">08011966123459</td>
-                      <td class="px-6 py-4">
-                        <div class="font-medium text-gray-900">Servicios Integrales del Centro</div>
-                        <p class="text-xs text-gray-500">Proveedor regional de suministros</p>
-                      </td>
-                      <td class="px-6 py-4">+504 2310-4455</td>
-                      <td class="px-6 py-4">
-                        <a href="mailto:gerente@tiendadelcentro.hn" class="text-blue-600 hover:underline">gerente@tiendadelcentro.hn</a>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-600">
-                          <span class="h-2 w-2 rounded-full bg-amber-500"></span>
-                          Proveedor
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-500">
-                          <span class="h-2 w-2 rounded-full bg-red-400"></span>
-                          Inactivo
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-2">
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-                          >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                              <path d="M5 4h14a1 1 0 011 1v2H4V5a1 1 0 011-1zm-1 6h16l-1.2 9.6a1 1 0 01-.99.9H6.19a1 1 0 01-.99-.9L4 10zm7 2v6h2v-6h-2z" />
-                            </svg>
-                            Editar
-                          </button>
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-100"
-                          >
-                            Activar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/50">
-                      <td class="px-6 py-4 font-medium text-gray-900">08011955123460</td>
-                      <td class="px-6 py-4">
-                        <div class="font-medium text-gray-900">Tienda El Centro</div>
-                        <p class="text-xs text-gray-500">Cliente detallista con tiendas físicas</p>
-                      </td>
-                      <td class="px-6 py-4">+504 3170-2222</td>
-                      <td class="px-6 py-4">
-                        <a href="mailto:gerente@tiendacentro.hn" class="text-blue-600 hover:underline">gerente@tiendacentro.hn</a>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-                          <span class="h-2 w-2 rounded-full bg-blue-500"></span>
-                          Cliente
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
-                          <span class="h-2 w-2 rounded-full bg-green-500"></span>
-                          Activo
-                        </span>
-                      </td>
-                      <td class="px-6 py-4">
-                        <div class="flex items-center gap-2">
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-                          >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                              <path d="M5 4h14a1 1 0 011 1v2H4V5a1 1 0 011-1zm-1 6h16l-1.2 9.6a1 1 0 01-.99.9H6.19a1 1 0 01-.99-.9L4 10zm7 2v6h2v-6h-2z" />
-                            </svg>
-                            Editar
-                          </button>
-                          <button
-                            class="inline-flex items-center gap-1 rounded-xl border border-transparent bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200"
-                          >
-                            Inactivar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              </form>
+            </div>
+            <div class="flex items-center gap-3">
+              <button
+                id="refresh-third-parties-button"
+                type="button"
+                class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M12 5a7 7 0 00-6.32 4H3l3.89 3.89.07.14L11 9H8.41A5 5 0 1112 17a4.93 4.93 0 01-3.27-1.22 1 1 0 10-1.32 1.5A6.93 6.93 0 0012 19a7 7 0 000-14z"
+                  />
+                </svg>
+                Actualizar
+              </button>
+              <button
+                id="toggle-inactive-third-parties-button"
+                type="button"
+                class="inline-flex items-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                role="switch"
+                aria-checked="true"
+              >
+                <span class="sr-only">Mostrar terceros inactivos</span>
+              </button>
+              <span id="third-parties-total" class="text-sm text-gray-500">0 terceros</span>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <div
+              id="third-parties-loading"
+              class="flex items-center justify-center gap-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 px-4 py-12 text-sm font-medium text-blue-800"
+            >
+              <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 00-10 10h4z"></path>
+              </svg>
+              Cargando terceros del maestro…
+            </div>
+
+            <div
+              id="third-parties-error"
+              class="mt-4 hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              role="alert"
+            ></div>
+
+            <div class="mt-4 overflow-hidden rounded-2xl border border-gray-200">
+              <table class="min-w-full divide-y divide-gray-200 text-left text-sm text-gray-700">
+                <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th scope="col" class="px-4 py-3">Identificación</th>
+                    <th scope="col" class="px-4 py-3">Nombre comercial</th>
+                    <th scope="col" class="px-4 py-3">Teléfono</th>
+                    <th scope="col" class="px-4 py-3">Correo</th>
+                    <th scope="col" class="px-4 py-3">Relación</th>
+                    <th scope="col" class="px-4 py-3">Estado</th>
+                    <th scope="col" class="px-4 py-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="third-parties-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
+              </table>
+              <div
+                id="third-parties-empty-state"
+                class="hidden bg-white px-6 py-10 text-center text-sm text-gray-500"
+              >
+                No se encontraron terceros que coincidan con el criterio de búsqueda. Crea uno nuevo o ajusta el filtro.
               </div>
             </div>
-            <div class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
-              <p>Mostrando 5 de 5 registros</p>
-              <div class="flex items-center gap-2">
-                <button class="inline-flex h-9 items-center rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 transition hover:bg-gray-100" type="button">
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M15 6l-6 6 6 6" />
-                  </svg>
-                </button>
-                <span class="text-xs font-medium text-gray-500">Página 1 de 1</span>
-                <button class="inline-flex h-9 items-center rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 transition hover:bg-gray-100" type="button">
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M9 6l6 6-6 6" />
-                  </svg>
-                </button>
+
+            <div
+              class="mt-4 flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p class="font-medium text-gray-600">Resumen del listado</p>
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span>Se actualiza automáticamente según tus filtros seleccionados.</span>
               </div>
             </div>
-          </section>
+          </div>
         </div>
       </main>
     </div>
-    <script>
-      const sidebar = document.getElementById('sidebar');
-      const toggleButton = document.getElementById('sidebar-toggle');
-      const overlay = document.getElementById('sidebar-overlay');
 
-      const closeSidebar = () => {
-        sidebar.classList.add('-translate-x-full');
-        overlay.classList.add('hidden');
-      };
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex w-full max-w-sm flex-col gap-3"></div>
 
-      const openSidebar = () => {
-        sidebar.classList.remove('-translate-x-full');
-        overlay.classList.remove('hidden');
-      };
+    <div
+      id="third-party-modal"
+      class="fixed inset-0 z-40 hidden items-center justify-center bg-gray-900/60 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="third-party-modal-title"
+    >
+      <div class="w-full max-w-3xl rounded-3xl bg-white shadow-2xl">
+        <form id="third-party-form" class="flex flex-col gap-6 p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="third-party-modal-title" class="text-xl font-semibold text-gray-900">Registrar tercero</h2>
+              <p id="third-party-modal-subtitle" class="mt-1 text-sm text-gray-500">
+                Completa la información del cliente o proveedor para añadirlo al maestro.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="close-third-party-modal"
+              class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Cerrar"
+            >
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M6.225 4.811l-.07.057-.057.07a1 1 0 000 1.32l.057.07L10.586 11l-4.43 4.672-.057.07a1 1 0 000 1.32l.057.07.07.057a1 1 0 001.32 0l.07-.057L12 12.414l4.672 4.43.07.057a1 1 0 001.32 0l.07-.057.057-.07a1 1 0 000-1.32l-.057-.07L13.414 11l4.43-4.672.057-.07a1 1 0 000-1.32l-.057-.07-.07-.057a1 1 0 00-1.32 0l-.07.057L12 9.586 7.328 5.156l-.07-.057a1 1 0 00-1.033-.11z"
+                />
+              </svg>
+            </button>
+          </div>
 
-      toggleButton?.addEventListener('click', () => {
-        if (sidebar.classList.contains('-translate-x-full')) {
-          openSidebar();
-        } else {
-          closeSidebar();
-        }
-      });
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="flex flex-col gap-1">
+              <label for="third-party-identificacion" class="text-sm font-medium text-gray-700">Identificación fiscal *</label>
+              <input
+                id="third-party-identificacion"
+                name="identificacion_fiscal"
+                type="text"
+                required
+                class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="NIT / RUC / Documento"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="third-party-nombre" class="text-sm font-medium text-gray-700">Nombre comercial *</label>
+              <input
+                id="third-party-nombre"
+                name="nombre_comercial"
+                type="text"
+                required
+                class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Nombre visible para el equipo"
+              />
+            </div>
+            <div class="flex flex-col gap-1 md:col-span-2">
+              <label for="third-party-razon-social" class="text-sm font-medium text-gray-700">Razón social</label>
+              <input
+                id="third-party-razon-social"
+                name="razon_social"
+                type="text"
+                class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Nombre legal registrado"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="third-party-correo" class="text-sm font-medium text-gray-700">Correo principal</label>
+              <input
+                id="third-party-correo"
+                name="correo_principal"
+                type="email"
+                class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="contacto@empresa.com"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="third-party-telefono" class="text-sm font-medium text-gray-700">Teléfono principal</label>
+              <input
+                id="third-party-telefono"
+                name="telefono_principal"
+                type="tel"
+                class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="+504 0000-0000"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="third-party-relacion" class="text-sm font-medium text-gray-700">Tipo de relación *</label>
+              <select
+                id="third-party-relacion"
+                name="tipo_relacion"
+                required
+                class="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="cliente">Cliente</option>
+                <option value="proveedor">Proveedor</option>
+                <option value="ambos">Cliente · Proveedor</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-3 md:col-span-2">
+              <input
+                id="third-party-activo"
+                name="activo"
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                checked
+              />
+              <label for="third-party-activo" class="text-sm text-gray-700">Tercero activo y disponible para transacciones</label>
+            </div>
+            <div class="flex flex-col gap-1 md:col-span-2">
+              <label for="third-party-notas" class="text-sm font-medium text-gray-700">Notas internas</label>
+              <textarea
+                id="third-party-notas"
+                name="notas"
+                rows="3"
+                class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Información de contacto adicional, condiciones de pago, etc."
+              ></textarea>
+            </div>
+          </div>
 
-      overlay?.addEventListener('click', closeSidebar);
-    </script>
+          <div class="flex flex-col gap-2 border-t border-gray-200 pt-4 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              id="cancel-third-party-modal"
+              class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              id="third-party-submit-button"
+              class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Guardar tercero
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script src="env.js"></script>
     <script src="config.js"></script>
     <script type="module" src="scripts/protected-page.js"></script>
+    <script type="module" src="scripts/maestros-clientes.js"></script>
   </body>
 </html>
