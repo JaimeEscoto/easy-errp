@@ -82,6 +82,24 @@ const normalizeActorId = (value) => {
   return String(value);
 };
 
+const normalizeActorName = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  return String(value);
+};
+
 const extractActorId = (req, payload = {}) => {
   const headerCandidates = ['x-admin-id', 'x-user-id', 'x-actor-id'];
 
@@ -100,6 +118,38 @@ const extractActorId = (req, payload = {}) => {
 
     if (value !== undefined && value !== null && value !== '') {
       return normalizeActorId(value);
+    }
+  }
+
+  return null;
+};
+
+const extractActorName = (req, payload = {}) => {
+  const headerCandidates = ['x-admin-name', 'x-user-name', 'x-actor-name', 'x-admin-display-name'];
+
+  for (const header of headerCandidates) {
+    const value = req.headers?.[header];
+
+    if (value !== undefined && value !== null && value !== '') {
+      return normalizeActorName(value);
+    }
+  }
+
+  const bodyCandidates = [
+    'updated_by_name',
+    'updated_by_label',
+    'modified_by_name',
+    'actor_name',
+    'actor_label',
+    'admin_name',
+    'user_name',
+  ];
+
+  for (const key of bodyCandidates) {
+    const value = payload?.[key] ?? req.body?.[key];
+
+    if (value !== undefined && value !== null && value !== '') {
+      return normalizeActorName(value);
     }
   }
 
@@ -149,10 +199,30 @@ const computeArticuloChanges = (previousData = {}, newData = {}) => {
   return changes;
 };
 
+const formatActorLabel = (actorId, actorName) => {
+  const normalizedId = actorId === undefined || actorId === null ? '' : String(actorId).trim();
+  const normalizedName = normalizeActorName(actorName) ?? '';
+
+  if (normalizedName && normalizedId && normalizedName.toLowerCase() !== normalizedId.toLowerCase()) {
+    return `${normalizedName} (${normalizedId})`;
+  }
+
+  if (normalizedName) {
+    return normalizedName;
+  }
+
+  if (normalizedId) {
+    return normalizedId;
+  }
+
+  return null;
+};
+
 const recordArticuloLog = async ({
   articuloId,
   action,
   actorId = null,
+  actorName = null,
   previousData = null,
   newData = null,
   changes = null,
@@ -166,7 +236,7 @@ const recordArticuloLog = async ({
   const payload = {
     articulo_id: articuloId ?? null,
     accion: action,
-    realizado_por: actorId ?? null,
+    realizado_por: formatActorLabel(actorId, actorName),
     datos_previos: previousData,
     datos_nuevos: newData,
     cambios: sanitizedChanges,
@@ -314,6 +384,7 @@ articulosRouter.post('/', async (req, res) => {
     const payload = req.body ?? {};
 
     const actorId = extractActorId(req, payload);
+    const actorName = extractActorName(req, payload);
 
     const { data, error } = await supabaseClient
       .from(ARTICULOS_TABLE)
@@ -332,6 +403,7 @@ articulosRouter.post('/', async (req, res) => {
       articuloId: data?.id ?? null,
       action: 'create',
       actorId,
+      actorName,
       newData: data,
       changes: computeArticuloChanges({}, data),
     });
@@ -444,6 +516,7 @@ articulosRouter.put('/:id', async (req, res) => {
 
   try {
     const actorId = extractActorId(req, updates);
+    const actorName = extractActorName(req, updates);
 
     const { data: existingData, error: fetchError } = await supabaseClient
       .from(ARTICULOS_TABLE)
@@ -521,6 +594,7 @@ articulosRouter.put('/:id', async (req, res) => {
       articuloId: safeUpdatedData?.id ?? id,
       action,
       actorId,
+      actorName,
       previousData: existingData,
       newData: safeUpdatedData,
       changes: computeArticuloChanges(existingData, safeUpdatedData),
@@ -547,6 +621,7 @@ articulosRouter.delete('/:id', async (req, res) => {
 
   try {
     const actorId = extractActorId(req);
+    const actorName = extractActorName(req);
 
     const { data: existingData, error: fetchError } = await supabaseClient
       .from(ARTICULOS_TABLE)
@@ -599,6 +674,7 @@ articulosRouter.delete('/:id', async (req, res) => {
       articuloId: data?.id ?? id,
       action: 'disable',
       actorId,
+      actorName,
       previousData: existingData,
       newData: data,
       changes: computeArticuloChanges(existingData, data),

@@ -1,7 +1,8 @@
-import { requireSession } from './session.js';
+import { requireSession, getDisplayName } from './session.js';
 
 const session = requireSession();
 const currentAdminId = session?.adminId ?? session?.id ?? session?.userId ?? null;
+const currentAdminName = getDisplayName(session);
 
 const sidebar = document.getElementById('sidebar');
 const toggleButton = document.getElementById('sidebar-toggle');
@@ -195,6 +196,10 @@ const request = async (method, pathSuffix = '', body) => {
 
   if (currentAdminId !== null && currentAdminId !== undefined) {
     options.headers['X-Admin-Id'] = currentAdminId;
+  }
+
+  if (currentAdminName) {
+    options.headers['X-Admin-Name'] = currentAdminName;
   }
 
   try {
@@ -404,6 +409,8 @@ const formatHistoryFieldValue = (field, value) => {
 
 const extractHistoryActor = (entry) => {
   const candidates = [
+    'realizado_por_nombre',
+    'realizado_por_label',
     'realizado_por',
     'actor_id',
     'updated_by',
