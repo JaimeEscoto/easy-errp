@@ -273,6 +273,11 @@ const getArticleIdentifier = (article) => {
   return identifier !== undefined && identifier !== null ? String(identifier) : '';
 };
 
+const getArticleCodeValue = (article) => {
+  const code = getFieldValue(article, ['codigo', 'code', 'sku', 'clave']);
+  return code !== undefined && code !== null ? String(code) : '';
+};
+
 const getFieldValue = (article, keys) => {
   for (const key of keys) {
     const value = article?.[key];
@@ -520,8 +525,31 @@ const renderArticles = () => {
   setHidden(emptyState, true);
 
   const fragment = document.createDocumentFragment();
+  const sortedArticles = [...filteredArticles].sort((a, b) => {
+    const codeA = getArticleCodeValue(a);
+    const codeB = getArticleCodeValue(b);
 
-  filteredArticles.forEach((article) => {
+    const numberA = Number(codeA);
+    const numberB = Number(codeB);
+    const bothNumeric =
+      codeA !== '' && codeB !== '' && !Number.isNaN(numberA) && !Number.isNaN(numberB);
+
+    if (bothNumeric) {
+      return numberA - numberB;
+    }
+
+    if (!codeA && codeB) {
+      return 1;
+    }
+
+    if (codeA && !codeB) {
+      return -1;
+    }
+
+    return codeA.localeCompare(codeB, 'es', { numeric: true, sensitivity: 'base' });
+  });
+
+  sortedArticles.forEach((article) => {
     const identifier = getArticleIdentifier(article);
     const hasIdentifier = Boolean(identifier);
     const codigo = getFieldValue(article, ['codigo', 'code', 'sku', 'clave']) ?? '—';
@@ -556,6 +584,23 @@ const renderArticles = () => {
     }
 
     const disabledClass = hasIdentifier ? '' : 'opacity-60 cursor-not-allowed pointer-events-none';
+
+    const toggleButtonConfig =
+      activeState === false
+        ? {
+            label: 'Habilitar',
+            className:
+              'inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500',
+            icon:
+              '<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.2 7.2a1 1 0 01-1.414 0l-3.2-3.2a1 1 0 111.414-1.414l2.493 2.493 6.493-6.493a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>',
+          }
+        : {
+            label: 'Desactivar',
+            className:
+              'inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500',
+            icon:
+              '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 3a1 1 0 00-.993.883L8 4H4a1 1 0 000 2h16a1 1 0 000-2h-4l-.007-.117A1 1 0 0015 3H9zm-3 6a1 1 0 011 1v8a1 1 0 102 0v-8a1 1 0 112 0v8a1 1 0 102 0v-8a1 1 0 012 0v8a3 3 0 01-2.824 2.995L14 20H10a3 3 0 01-2.995-2.824L7 17V10a1 1 0 011-1z" /></svg>',
+          };
 
     row.innerHTML = `
       <td class="px-4 py-3 text-sm font-medium text-gray-900">${codigo}</td>
@@ -594,15 +639,13 @@ const renderArticles = () => {
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 ${disabledClass}"
-            data-action="delete"
+            class="${toggleButtonConfig.className} ${disabledClass}"
+            data-action="toggle-active"
             data-id="${identifier}"
             ${hasIdentifier ? '' : 'disabled'}
           >
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M9 3a1 1 0 00-.993.883L8 4H4a1 1 0 000 2h16a1 1 0 000-2h-4l-.007-.117A1 1 0 0015 3H9zm-3 6a1 1 0 011 1v8a1 1 0 102 0v-8a1 1 0 112 0v8a1 1 0 102 0v-8a1 1 0 012 0v8a3 3 0 01-2.824 2.995L14 20H10a3 3 0 01-2.995-2.824L7 17V10a1 1 0 011-1z" />
-            </svg>
-            Desactivar
+            ${toggleButtonConfig.icon}
+            ${toggleButtonConfig.label}
           </button>
         </div>
       </td>
@@ -1061,7 +1104,7 @@ const handleFormSubmit = async (event) => {
   fetchArticles();
 };
 
-const handleDelete = async (identifier) => {
+const handleToggleActive = async (identifier) => {
   if (!identifier) {
     showToast('No fue posible determinar el artículo seleccionado.', 'error');
     return;
@@ -1073,13 +1116,41 @@ const handleDelete = async (identifier) => {
   }
 
   const article = articles.find((item) => getArticleIdentifier(item) === identifier);
-  const displayName = getFieldValue(article, ['nombre', 'name']) ?? identifier;
+  if (!article) {
+    showToast('No se encontró la información del artículo seleccionado.', 'error');
+    return;
+  }
 
-  const confirmDelete = window.confirm(
+  const displayName = getFieldValue(article, ['nombre', 'name']) ?? identifier;
+  const isInactive = isArticleInactive(article);
+
+  if (isInactive) {
+    const confirmEnable = window.confirm(
+      `¿Deseas habilitar el artículo "${displayName}"? Volverá a estar disponible en el catálogo.`
+    );
+
+    if (!confirmEnable) {
+      return;
+    }
+
+    const result = await request('PUT', `/${encodeURIComponent(identifier)}`, { activo: true });
+
+    if (!result.ok) {
+      const message = result?.data?.message || result?.error || 'No se pudo habilitar el artículo.';
+      showToast(message, 'error');
+      return;
+    }
+
+    showToast('El artículo se habilitó correctamente.', 'success');
+    fetchArticles();
+    return;
+  }
+
+  const confirmDisable = window.confirm(
     `¿Deseas desactivar el artículo "${displayName}"? Podrás volver a activarlo desde el catálogo.`
   );
 
-  if (!confirmDelete) {
+  if (!confirmDisable) {
     return;
   }
 
@@ -1159,8 +1230,8 @@ articleTableBody?.addEventListener('click', (event) => {
       }
 
       openModal({ mode: 'edit', article });
-    } else if (action === 'delete') {
-      handleDelete(identifier);
+    } else if (action === 'toggle-active') {
+      handleToggleActive(identifier);
     } else if (action === 'history') {
       openHistoryForIdentifier(identifier);
     }
