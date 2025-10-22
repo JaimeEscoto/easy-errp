@@ -108,7 +108,16 @@ const getArticleStateRawValue = (article) => {
     return article.activo;
   }
 
-  return getFieldValue(article, ['active', 'habilitado', 'enabled']);
+  const alternativeState = getFieldValue(article, [
+    'active',
+    'habilitado',
+    'enabled',
+    'estado',
+    'status',
+    'state',
+  ]);
+
+  return alternativeState;
 };
 
 const interpretActiveState = (stateValue) => {
@@ -276,6 +285,29 @@ const getArticleIdentifier = (article) => {
 const getArticleCodeValue = (article) => {
   const code = getFieldValue(article, ['codigo', 'code', 'sku', 'clave']);
   return code !== undefined && code !== null ? String(code) : '';
+};
+
+const compareArticlesByCode = (a, b) => {
+  const codeA = getArticleCodeValue(a);
+  const codeB = getArticleCodeValue(b);
+
+  const numberA = Number(codeA);
+  const numberB = Number(codeB);
+  const bothNumeric = codeA !== '' && codeB !== '' && !Number.isNaN(numberA) && !Number.isNaN(numberB);
+
+  if (bothNumeric) {
+    return numberA - numberB;
+  }
+
+  if (!codeA && codeB) {
+    return 1;
+  }
+
+  if (codeA && !codeB) {
+    return -1;
+  }
+
+  return codeA.localeCompare(codeB, 'es', { numeric: true, sensitivity: 'base' });
 };
 
 const getFieldValue = (article, keys) => {
@@ -525,29 +557,7 @@ const renderArticles = () => {
   setHidden(emptyState, true);
 
   const fragment = document.createDocumentFragment();
-  const sortedArticles = [...filteredArticles].sort((a, b) => {
-    const codeA = getArticleCodeValue(a);
-    const codeB = getArticleCodeValue(b);
-
-    const numberA = Number(codeA);
-    const numberB = Number(codeB);
-    const bothNumeric =
-      codeA !== '' && codeB !== '' && !Number.isNaN(numberA) && !Number.isNaN(numberB);
-
-    if (bothNumeric) {
-      return numberA - numberB;
-    }
-
-    if (!codeA && codeB) {
-      return 1;
-    }
-
-    if (codeA && !codeB) {
-      return -1;
-    }
-
-    return codeA.localeCompare(codeB, 'es', { numeric: true, sensitivity: 'base' });
-  });
+  const sortedArticles = [...filteredArticles].sort(compareArticlesByCode);
 
   sortedArticles.forEach((article) => {
     const identifier = getArticleIdentifier(article);
@@ -588,7 +598,7 @@ const renderArticles = () => {
     const toggleButtonConfig =
       activeState === false
         ? {
-            label: 'Habilitar',
+            label: 'Activar',
             className:
               'inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500',
             icon:
@@ -740,7 +750,7 @@ const fetchArticles = async () => {
   }
 
   const payload = Array.isArray(result.data) ? result.data : [];
-  articles = payload;
+  articles = [...payload].sort(compareArticlesByCode);
   renderArticles();
 };
 
