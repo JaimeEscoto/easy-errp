@@ -395,6 +395,49 @@ articulosRouter.get('/:id', async (req, res) => {
   }
 });
 
+articulosRouter.get('/:id/historial', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    let lastMissingTableError = null;
+
+    for (const table of ARTICULOS_LOG_TABLE_CANDIDATES) {
+      const { data, error } = await supabaseClient
+        .from(table)
+        .select('*')
+        .eq('articulo_id', id);
+
+      if (!error) {
+        return res.json(data ?? []);
+      }
+
+      if (error.code === '42P01') {
+        lastMissingTableError = error;
+        continue;
+      }
+
+      console.error(`List articulo history error on table ${table}:`, error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulo history.', error));
+    }
+
+    if (lastMissingTableError) {
+      console.error('Articulo history error: log tables are missing.');
+    }
+
+    return res.status(404).json({
+      message: 'Historial no disponible. Configura la tabla de auditoría para visualizar los cambios.',
+      candidates: ARTICULOS_LOG_TABLE_CANDIDATES,
+    });
+  } catch (err) {
+    console.error('Unhandled list articulo history error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulo history.', err));
+  }
+});
+
 articulosRouter.put('/:id', async (req, res) => {
   const { id } = req.params;
   const updates = req.body ?? {};

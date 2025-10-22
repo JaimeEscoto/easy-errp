@@ -177,15 +177,11 @@
               <button
                 id="toggle-inactive-articles-button"
                 type="button"
-                class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                aria-pressed="false"
+                class="inline-flex items-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                role="switch"
+                aria-checked="false"
               >
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path
-                    d="M12 5c3.86 0 7 3.14 7 7s-3.14 7-7 7a6.98 6.98 0 01-5.65-2.83 1 1 0 10-1.7 1.06A8.98 8.98 0 0012 21c4.97 0 9-4.03 9-9s-4.03-9-9-9c-3.15 0-5.92 1.61-7.51 4.05a1 1 0 101.69 1.07A6.98 6.98 0 0112 5zm0 4a3 3 0 11-.001 6.001A3 3 0 0112 9z"
-                  />
-                </svg>
-                Ver desactivados
+                <span class="sr-only">Mostrar artículos desactivados</span>
               </button>
               <span id="articles-total" class="text-sm text-gray-500">0 artículos</span>
             </div>
@@ -360,6 +356,68 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div
+      id="article-history-modal"
+      class="fixed inset-0 z-40 hidden items-center justify-center bg-gray-900/60 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="article-history-title"
+    >
+      <div class="w-full max-w-3xl rounded-3xl bg-white shadow-2xl">
+        <div class="flex flex-col gap-6 p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="article-history-title" class="text-xl font-semibold text-gray-900">Historial de cambios</h2>
+              <p id="article-history-subtitle" class="mt-1 text-sm text-gray-500"></p>
+            </div>
+            <button
+              type="button"
+              id="close-article-history-modal"
+              class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Cerrar historial"
+            >
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M6.225 4.811l-.07.057-.057.07a1 1 0 000 1.32l.057.07L10.586 11l-4.43 4.672-.057.07a1 1 0 000 1.32l.057.07.07.057a1 1 0 001.32 0l.07-.057L12 12.414l4.672 4.43.07.057a1 1 0 001.32 0l.07-.057.057-.07a1 1 0 000-1.32l-.057-.07L13.414 11l4.43-4.672.057-.07a1 1 0 000-1.32l-.057-.07-.07-.057a1 1 0 00-1.32 0l-.07.057L12 9.586 7.328 5.156l-.07-.057a1 1 0 00-1.033-.111z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <div
+              id="article-history-loading"
+              class="hidden items-center justify-center gap-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 px-4 py-6 text-sm font-medium text-blue-800"
+            >
+              <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 00-10 10h4z"></path>
+              </svg>
+              Cargando historial…
+            </div>
+
+            <div
+              id="article-history-error"
+              class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              role="alert"
+            ></div>
+
+            <div
+              id="article-history-empty"
+              class="hidden rounded-2xl border border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500"
+            >
+              Aún no hay movimientos registrados para este artículo.
+            </div>
+
+            <ul
+              id="article-history-timeline"
+              class="max-h-96 space-y-4 overflow-y-auto pr-1 text-sm text-gray-700"
+            ></ul>
+          </div>
+        </div>
       </div>
     </div>
     <script src="env.js"></script>

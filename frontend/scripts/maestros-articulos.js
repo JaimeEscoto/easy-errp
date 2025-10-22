@@ -55,6 +55,15 @@ const toggleInactiveButton = document.getElementById('toggle-inactive-articles-b
 const totalLabel = document.getElementById('articles-total');
 const toastContainer = document.getElementById('toast-container');
 
+const historyModal = document.getElementById('article-history-modal');
+const historyCloseButton = document.getElementById('close-article-history-modal');
+const historyTitle = document.getElementById('article-history-title');
+const historySubtitle = document.getElementById('article-history-subtitle');
+const historyTimeline = document.getElementById('article-history-timeline');
+const historyLoading = document.getElementById('article-history-loading');
+const historyError = document.getElementById('article-history-error');
+const historyEmpty = document.getElementById('article-history-empty');
+
 const modal = document.getElementById('article-modal');
 const modalForm = document.getElementById('article-form');
 const modalTitle = document.getElementById('article-modal-title');
@@ -74,7 +83,20 @@ const fieldActivo = document.getElementById('article-activo');
 let articles = [];
 let currentArticleId = null;
 let isSubmitting = false;
-let showOnlyInactive = false;
+let includeInactive = false;
+let currentHistoryArticleId = null;
+let historyRequestToken = 0;
+
+const updateBodyScrollLock = () => {
+  const articleModalOpen = modal?.classList.contains('flex');
+  const historyModalOpen = historyModal?.classList.contains('flex');
+
+  if (articleModalOpen || historyModalOpen) {
+    document.body.classList.add('overflow-hidden');
+  } else {
+    document.body.classList.remove('overflow-hidden');
+  }
+};
 
 const getArticleStateRawValue = (article) => {
   if (!article) {
@@ -118,34 +140,45 @@ const updateToggleInactiveButton = () => {
     return;
   }
 
-  toggleInactiveButton.textContent = '';
+  toggleInactiveButton.innerHTML = '';
 
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.setAttribute('class', 'h-4 w-4');
-  icon.setAttribute('viewBox', '0 0 24 24');
-  icon.setAttribute('fill', 'currentColor');
-  icon.setAttribute('aria-hidden', 'true');
+  const wrapper = document.createElement('span');
+  wrapper.className = 'flex items-center gap-3';
 
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute(
-    'd',
-    'M12 5c3.86 0 7 3.14 7 7s-3.14 7-7 7a6.98 6.98 0 01-5.65-2.83 1 1 0 10-1.7 1.06A8.98 8.98 0 0012 21c4.97 0 9-4.03 9-9s-4.03-9-9-9c-3.15 0-5.92 1.61-7.51 4.05a1 1 0 101.69 1.07A6.98 6.98 0 0112 5zm0 4a3 3 0 11-.001 6.001A3 3 0 0112 9z'
-  );
+  const indicator = document.createElement('span');
+  indicator.className = `relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${
+    includeInactive ? 'bg-blue-600/90' : 'bg-gray-300'
+  }`;
 
-  icon.appendChild(path);
-  toggleInactiveButton.appendChild(icon);
+  const handle = document.createElement('span');
+  handle.className = `inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-blue-600 shadow transition-transform duration-200 transform ${
+    includeInactive ? 'translate-x-4 opacity-100' : 'translate-x-0 opacity-0'
+  }`;
+  handle.innerHTML =
+    '<svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-7.2 7.2a1 1 0 01-1.414 0l-3.2-3.2a1 1 0 011.414-1.414l2.493 2.493 6.493-6.493a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+
+  indicator.appendChild(handle);
 
   const label = document.createElement('span');
   label.className = 'text-sm font-medium';
-  label.textContent = showOnlyInactive ? 'Ver activos' : 'Ver desactivados';
-  toggleInactiveButton.appendChild(label);
+  label.textContent = includeInactive ? 'Mostrando también desactivados' : 'Mostrar artículos desactivados';
 
-  toggleInactiveButton.setAttribute('aria-pressed', showOnlyInactive ? 'true' : 'false');
-  toggleInactiveButton.classList.toggle('bg-blue-600', showOnlyInactive);
-  toggleInactiveButton.classList.toggle('text-white', showOnlyInactive);
-  toggleInactiveButton.classList.toggle('border-transparent', showOnlyInactive);
-  toggleInactiveButton.classList.toggle('hover:bg-blue-700', showOnlyInactive);
-  toggleInactiveButton.classList.toggle('hover:bg-gray-50', !showOnlyInactive);
+  wrapper.appendChild(indicator);
+  wrapper.appendChild(label);
+
+  toggleInactiveButton.appendChild(wrapper);
+
+  toggleInactiveButton.setAttribute('aria-checked', includeInactive ? 'true' : 'false');
+  toggleInactiveButton.setAttribute(
+    'aria-label',
+    includeInactive ? 'Ocultar artículos desactivados' : 'Mostrar artículos desactivados'
+  );
+  toggleInactiveButton.classList.toggle('bg-blue-50', includeInactive);
+  toggleInactiveButton.classList.toggle('bg-white', !includeInactive);
+  toggleInactiveButton.classList.toggle('border-blue-200', includeInactive);
+  toggleInactiveButton.classList.toggle('border-gray-300', !includeInactive);
+  toggleInactiveButton.classList.toggle('text-blue-700', includeInactive);
+  toggleInactiveButton.classList.toggle('text-gray-700', !includeInactive);
 };
 
 const request = async (method, pathSuffix = '', body) => {
@@ -295,6 +328,154 @@ const formatDateTime = (value) => {
   }).format(date);
 };
 
+const getHistoryTimestamp = (entry) => {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    'created_at',
+    'creado_en',
+    'inserted_at',
+    'createdAt',
+    'creadoEn',
+    'fecha',
+    'fecha_creacion',
+    'fechaCreacion',
+    'timestamp',
+    'registrado_en',
+  ];
+
+  for (const key of candidates) {
+    const value = entry[key];
+    if (!value) {
+      continue;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  return null;
+};
+
+const formatHistoryValue = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return '—';
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Sí' : 'No';
+  }
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch (_err) {
+      return String(value);
+    }
+  }
+
+  return String(value);
+};
+
+const formatHistoryFieldValue = (field, value) => {
+  if (value === undefined || value === null || value === '') {
+    return '—';
+  }
+
+  if (field === 'activo') {
+    const interpreted = interpretActiveState(value);
+    return interpreted ? 'Activo' : 'Inactivo';
+  }
+
+  if (['precio', 'price', 'costo', 'cost'].includes(field)) {
+    return formatCurrency(value);
+  }
+
+  if (['existencia', 'stock', 'cantidad', 'quantity'].includes(field)) {
+    return formatNumber(value);
+  }
+
+  return formatHistoryValue(value);
+};
+
+const extractHistoryActor = (entry) => {
+  const candidates = [
+    'realizado_por',
+    'actor_id',
+    'updated_by',
+    'modificado_por',
+    'created_by',
+    'admin_id',
+    'usuario',
+    'user_id',
+  ];
+
+  for (const key of candidates) {
+    const value = entry?.[key];
+    if (value !== undefined && value !== null && value !== '') {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const normalizeHistoryChanges = (entry) => {
+  const rawChanges = entry?.cambios ?? entry?.changes ?? null;
+  let parsedChanges = rawChanges;
+
+  if (typeof rawChanges === 'string') {
+    try {
+      parsedChanges = JSON.parse(rawChanges);
+    } catch (_err) {
+      parsedChanges = null;
+    }
+  }
+
+  if (!parsedChanges || typeof parsedChanges !== 'object') {
+    return [];
+  }
+
+  return Object.entries(parsedChanges).map(([field, detail]) => {
+    if (detail && typeof detail === 'object') {
+      const before = detail.before ?? detail.antes ?? detail.prev ?? detail.previous ?? null;
+      const after = detail.after ?? detail.despues ?? detail.next ?? detail.nuevo ?? null;
+      return { field, before, after };
+    }
+
+    return { field, before: null, after: detail };
+  });
+};
+
+const describeHistoryAction = (action) => {
+  const normalized = typeof action === 'string' ? action.trim().toLowerCase() : '';
+
+  switch (normalized) {
+    case 'create':
+    case 'crear':
+    case 'creado':
+      return { label: 'Creación', className: 'bg-emerald-100 text-emerald-700' };
+    case 'update':
+    case 'actualizar':
+    case 'updated':
+      return { label: 'Actualización', className: 'bg-blue-100 text-blue-700' };
+    case 'disable':
+    case 'desactivar':
+    case 'inactive':
+      return { label: 'Desactivación', className: 'bg-red-100 text-red-700' };
+    case 'enable':
+    case 'activar':
+    case 'active':
+      return { label: 'Activación', className: 'bg-amber-100 text-amber-700' };
+    default:
+      return { label: action ? action : 'Evento', className: 'bg-gray-100 text-gray-600' };
+  }
+};
+
 const renderArticles = () => {
   if (!articleTableBody) {
     return;
@@ -302,7 +483,7 @@ const renderArticles = () => {
 
   const query = searchInput?.value?.trim().toLowerCase() ?? '';
   const filteredArticles = articles.filter((article) => {
-    if (showOnlyInactive && !isArticleInactive(article)) {
+    if (!includeInactive && isArticleInactive(article)) {
       return false;
     }
 
@@ -358,7 +539,15 @@ const renderArticles = () => {
     estadoBadge.textContent = estadoConfig.label;
 
     const row = document.createElement('tr');
-    row.className = 'hover:bg-gray-50/60 transition';
+    row.className = 'transition';
+    if (hasIdentifier) {
+      row.classList.add('hover:bg-gray-50/60', 'cursor-pointer');
+      row.dataset.identifier = identifier;
+      row.title = 'Haz clic para ver el historial de cambios';
+    } else {
+      row.classList.add('opacity-60');
+    }
+
     const disabledClass = hasIdentifier ? '' : 'opacity-60 cursor-not-allowed pointer-events-none';
 
     row.innerHTML = `
@@ -383,6 +572,18 @@ const renderArticles = () => {
               <path d="M5 18.5V21h2.5l7.37-7.37-2.5-2.5L5 18.5zm13.71-7.79a1 1 0 000-1.41l-2-2a1 1 0 00-1.41 0l-1.58 1.59 3.46 3.46 1.53-1.64z" />
             </svg>
             Editar
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${disabledClass}"
+            data-action="history"
+            data-id="${identifier}"
+            ${hasIdentifier ? '' : 'disabled'}
+          >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 5a1 1 0 10-2 0v5a1 1 0 00.293.707l3 3a1 1 0 101.414-1.414L13 11.586V7z" />
+            </svg>
+            Historial
           </button>
           <button
             type="button"
@@ -535,7 +736,7 @@ const openModal = ({ mode, article }) => {
 
   modal.classList.remove('hidden');
   modal.classList.add('flex');
-  document.body.classList.add('overflow-hidden');
+  updateBodyScrollLock();
   fieldCodigo.focus();
 };
 
@@ -546,9 +747,202 @@ const closeModal = () => {
 
   modal.classList.add('hidden');
   modal.classList.remove('flex');
-  document.body.classList.remove('overflow-hidden');
+  updateBodyScrollLock();
   modalForm.reset();
   currentArticleId = null;
+};
+
+const resetHistoryModalState = () => {
+  if (historyTimeline) {
+    historyTimeline.innerHTML = '';
+  }
+
+  setHidden(historyLoading, true);
+  setHidden(historyError, true);
+  setHidden(historyEmpty, true);
+};
+
+const renderHistoryEntries = (entries) => {
+  if (!historyTimeline) {
+    return;
+  }
+
+  historyTimeline.innerHTML = '';
+
+  if (!Array.isArray(entries) || !entries.length) {
+    setHidden(historyEmpty, false);
+    return;
+  }
+
+  setHidden(historyEmpty, true);
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    const dateA = getHistoryTimestamp(a);
+    const dateB = getHistoryTimestamp(b);
+    const timeA = dateA ? dateA.getTime() : 0;
+    const timeB = dateB ? dateB.getTime() : 0;
+    return timeB - timeA;
+  });
+
+  const fragment = document.createDocumentFragment();
+
+  sortedEntries.forEach((entry) => {
+    const actionInfo = describeHistoryAction(entry?.accion ?? entry?.action);
+    const timestamp = getHistoryTimestamp(entry);
+    const actor = extractHistoryActor(entry);
+    const note =
+      entry?.descripcion ?? entry?.detalle ?? entry?.nota ?? entry?.comentario ?? entry?.comment ?? null;
+    const changes = normalizeHistoryChanges(entry);
+
+    const item = document.createElement('li');
+    item.className = 'relative rounded-2xl border border-gray-200 bg-white p-4 shadow-sm';
+
+    const header = document.createElement('div');
+    header.className = 'flex flex-wrap items-center justify-between gap-3';
+
+    const badge = document.createElement('span');
+    badge.className = `inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${actionInfo.className}`;
+    badge.textContent = actionInfo.label;
+
+    const timeLabel = document.createElement('span');
+    timeLabel.className = 'text-xs text-gray-500';
+    timeLabel.textContent = timestamp ? formatDateTime(timestamp) : 'Fecha no disponible';
+
+    header.appendChild(badge);
+    header.appendChild(timeLabel);
+    item.appendChild(header);
+
+    const actorLabel = document.createElement('p');
+    actorLabel.className = 'mt-2 text-sm text-gray-600';
+    actorLabel.textContent = actor ? `Registrado por ${String(actor)}.` : 'Usuario no identificado.';
+    item.appendChild(actorLabel);
+
+    if (note) {
+      const noteParagraph = document.createElement('p');
+      noteParagraph.className = 'mt-2 text-sm text-gray-700';
+      noteParagraph.textContent = String(note);
+      item.appendChild(noteParagraph);
+    }
+
+    if (changes.length) {
+      const changeList = document.createElement('ul');
+      changeList.className = 'mt-3 space-y-1 text-xs text-gray-600';
+
+      changes.forEach(({ field, before, after }) => {
+        const changeItem = document.createElement('li');
+        changeItem.innerHTML = `
+          <span class="font-medium text-gray-700">${field}</span>
+          <span class="text-gray-500">${formatHistoryFieldValue(field, before)}</span>
+          <span class="px-1 text-gray-400">→</span>
+          <span class="text-gray-700">${formatHistoryFieldValue(field, after)}</span>
+        `;
+        changeList.appendChild(changeItem);
+      });
+
+      item.appendChild(changeList);
+    } else {
+      const noChanges = document.createElement('p');
+      noChanges.className = 'mt-3 text-xs text-gray-500';
+      noChanges.textContent = 'No se registraron cambios específicos en este evento.';
+      item.appendChild(noChanges);
+    }
+
+    fragment.appendChild(item);
+  });
+
+  historyTimeline.appendChild(fragment);
+};
+
+const openHistoryModalForArticle = (article) => {
+  if (!historyModal) {
+    return;
+  }
+
+  const identifier = getArticleIdentifier(article);
+
+  if (!identifier) {
+    showToast('No se encontró la información del artículo seleccionado.', 'error');
+    return;
+  }
+
+  const codigo = getFieldValue(article, ['codigo', 'code', 'sku', 'clave']);
+  const nombre = getFieldValue(article, ['nombre', 'name']);
+  const subtitleParts = [codigo, nombre].filter(Boolean);
+
+  historyTitle.textContent = 'Historial de cambios';
+  historySubtitle.textContent = subtitleParts.length
+    ? subtitleParts.join(' · ')
+    : `ID de artículo: ${identifier}`;
+
+  currentHistoryArticleId = identifier;
+  resetHistoryModalState();
+  setHidden(historyLoading, false);
+
+  historyModal.classList.remove('hidden');
+  historyModal.classList.add('flex');
+  updateBodyScrollLock();
+
+  const requestId = ++historyRequestToken;
+
+  loadArticleHistory(identifier, requestId);
+};
+
+const closeHistoryModal = () => {
+  if (!historyModal) {
+    return;
+  }
+
+  historyModal.classList.add('hidden');
+  historyModal.classList.remove('flex');
+  resetHistoryModalState();
+  currentHistoryArticleId = null;
+  if (historySubtitle) {
+    historySubtitle.textContent = '';
+  }
+  updateBodyScrollLock();
+};
+
+const loadArticleHistory = async (identifier, requestId) => {
+  const result = await request('GET', `/${encodeURIComponent(identifier)}/historial`);
+
+  if (requestId !== historyRequestToken) {
+    return;
+  }
+
+  setHidden(historyLoading, true);
+
+  if (!result.ok) {
+    const message =
+      result?.data?.message ||
+      result?.error ||
+      'No fue posible obtener el historial de este artículo. Intenta nuevamente más tarde.';
+
+    if (historyError) {
+      historyError.textContent = message;
+      setHidden(historyError, false);
+    }
+
+    return;
+  }
+
+  const entries = Array.isArray(result.data) ? result.data : [];
+  renderHistoryEntries(entries);
+};
+
+const openHistoryForIdentifier = (identifier) => {
+  if (!identifier) {
+    showToast('No fue posible determinar el artículo seleccionado.', 'error');
+    return;
+  }
+
+  const article = articles.find((item) => getArticleIdentifier(item) === identifier);
+
+  if (!article) {
+    showToast('No se encontró la información del artículo seleccionado.', 'error');
+    return;
+  }
+
+  openHistoryModalForArticle(article);
 };
 
 const getFormPayload = () => {
@@ -702,6 +1096,7 @@ addButton?.addEventListener('click', () => {
 
 modalCloseButton?.addEventListener('click', closeModal);
 modalCancelButton?.addEventListener('click', closeModal);
+historyCloseButton?.addEventListener('click', closeHistoryModal);
 
 modal?.addEventListener('click', (event) => {
   if (event.target === modal) {
@@ -709,8 +1104,19 @@ modal?.addEventListener('click', (event) => {
   }
 });
 
+historyModal?.addEventListener('click', (event) => {
+  if (event.target === historyModal) {
+    closeHistoryModal();
+  }
+});
+
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    if (historyModal?.classList.contains('flex')) {
+      closeHistoryModal();
+      return;
+    }
+
     closeModal();
   }
 });
@@ -726,32 +1132,48 @@ refreshButton?.addEventListener('click', () => {
 });
 
 toggleInactiveButton?.addEventListener('click', () => {
-  showOnlyInactive = !showOnlyInactive;
+  includeInactive = !includeInactive;
   updateToggleInactiveButton();
   renderArticles();
 });
 
 articleTableBody?.addEventListener('click', (event) => {
   const actionButton = event.target.closest('[data-action]');
-  if (!actionButton) {
+  if (actionButton) {
+    const identifier = actionButton.getAttribute('data-id');
+    const action = actionButton.getAttribute('data-action');
+
+    if (action === 'edit') {
+      const article = articles.find((item) => getArticleIdentifier(item) === identifier);
+
+      if (!article) {
+        showToast('No se encontró la información del artículo seleccionado.', 'error');
+        return;
+      }
+
+      openModal({ mode: 'edit', article });
+    } else if (action === 'delete') {
+      handleDelete(identifier);
+    } else if (action === 'history') {
+      openHistoryForIdentifier(identifier);
+    }
+
     return;
   }
 
-  const identifier = actionButton.getAttribute('data-id');
-  const action = actionButton.getAttribute('data-action');
+  const row = event.target.closest('tr');
 
-  if (action === 'edit') {
-    const article = articles.find((item) => getArticleIdentifier(item) === identifier);
-
-    if (!article) {
-      showToast('No se encontró la información del artículo seleccionado.', 'error');
-      return;
-    }
-
-    openModal({ mode: 'edit', article });
-  } else if (action === 'delete') {
-    handleDelete(identifier);
+  if (!row) {
+    return;
   }
+
+  const identifier = row.dataset.identifier;
+
+  if (!identifier) {
+    return;
+  }
+
+  openHistoryForIdentifier(identifier);
 });
 
 updateToggleInactiveButton();
