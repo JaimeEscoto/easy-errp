@@ -90,6 +90,9 @@ let isSubmitting = false;
 let includeInactive = true;
 let currentHistoryThirdPartyId = null;
 let historyRequestToken = 0;
+let isEditMode = false;
+let currentEditingIdentifier = null;
+let currentEditingThirdParty = null;
 
 const setHidden = (element, hidden) => {
   if (!element) {
@@ -635,8 +638,10 @@ const renderThirdParties = (items) => {
         <div class="flex justify-end gap-2">
           <button
             type="button"
-            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-            disabled
+            class="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 ${disabledClass}"
+            data-action="edit"
+            data-id="${hasIdentifier ? String(identifier) : ''}"
+            ${hasIdentifier ? '' : 'disabled'}
           >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M5 4h14a1 1 0 011 1v2H4V5a1 1 0 011-1zm-1 6h16l-1.2 9.6a1 1 0 01-.99.9H6.19a1 1 0 01-.99-.9L4 10zm7 2v6h2v-6h-2z" />
@@ -819,6 +824,26 @@ const openHistoryModalForThirdParty = (thirdParty) => {
   loadThirdPartyHistory(currentHistoryThirdPartyId, requestId);
 };
 
+const findThirdPartyLocally = (identifier) => {
+  if (!identifier) {
+    return null;
+  }
+
+  return thirdParties.find((item) => {
+    const recordId = getThirdPartyRecordId(item);
+    if (recordId !== undefined && recordId !== null && String(recordId) === String(identifier)) {
+      return true;
+    }
+
+    const taxId = getThirdPartyIdentification(item);
+    if (taxId !== undefined && taxId !== null && String(taxId) === String(identifier)) {
+      return true;
+    }
+
+    return false;
+  });
+};
+
 const closeHistoryModal = () => {
   if (!historyModal) {
     return;
@@ -869,19 +894,7 @@ const openHistoryForIdentifier = (identifier) => {
     return;
   }
 
-  const target = thirdParties.find((item) => {
-    const recordId = getThirdPartyRecordId(item);
-    if (recordId !== undefined && recordId !== null && String(recordId) === String(identifier)) {
-      return true;
-    }
-
-    const taxId = getThirdPartyIdentification(item);
-    if (taxId !== undefined && taxId !== null && String(taxId) === String(identifier)) {
-      return true;
-    }
-
-    return false;
-  });
+  const target = findThirdPartyLocally(identifier);
 
   if (!target) {
     showToast('No se encontró la información del tercero seleccionado.', 'error');
@@ -889,6 +902,131 @@ const openHistoryForIdentifier = (identifier) => {
   }
 
   openHistoryModalForThirdParty(target);
+};
+
+const openEditModalForThirdParty = (thirdParty) => {
+  if (!modal || !modalForm) {
+    return;
+  }
+
+  if (!thirdParty) {
+    showToast('No se encontró la información del tercero seleccionado.', 'error');
+    return;
+  }
+
+  const recordId = getThirdPartyRecordId(thirdParty);
+  const taxId = getThirdPartyIdentification(thirdParty);
+  const identifier = recordId ?? taxId;
+  const normalizedIdentifier =
+    typeof identifier === 'string' ? identifier.trim() : identifier;
+
+  if (normalizedIdentifier === null || normalizedIdentifier === undefined || normalizedIdentifier === '') {
+    showToast('No fue posible determinar el tercero a editar.', 'error');
+    return;
+  }
+
+  isEditMode = true;
+  currentEditingIdentifier = normalizedIdentifier;
+  currentEditingThirdParty = thirdParty;
+
+  modalForm.reset();
+
+  const nombre = getThirdPartyName(thirdParty) ?? '';
+  const razonSocial =
+    getFieldValue(thirdParty, ['razon_social', 'legal_name', 'nombre_legal', 'razonSocial']) ?? '';
+  const correo = getThirdPartyEmail(thirdParty) ?? '';
+  const telefono = getThirdPartyPhone(thirdParty) ?? '';
+  const relation = getThirdPartyRelation(thirdParty);
+  const status = getThirdPartyStatus(thirdParty);
+  const notes =
+    getFieldValue(thirdParty, ['notas_internas', 'notas', 'nota', 'comentario', 'comentarios']) ?? '';
+
+  if (fieldIdentificacion) {
+    const trimmedTaxId = taxId ? String(taxId).trim() : '';
+    fieldIdentificacion.value = trimmedTaxId;
+  }
+
+  if (fieldNombre) {
+    fieldNombre.value = nombre;
+  }
+
+  if (fieldRazonSocial) {
+    fieldRazonSocial.value = razonSocial;
+  }
+
+  if (fieldCorreo) {
+    fieldCorreo.value = correo;
+  }
+
+  if (fieldTelefono) {
+    fieldTelefono.value = telefono;
+  }
+
+  if (fieldRelacion) {
+    if (relation === 'proveedor') {
+      fieldRelacion.value = 'proveedor';
+    } else if (relation === 'ambos') {
+      fieldRelacion.value = 'ambos';
+    } else {
+      fieldRelacion.value = 'cliente';
+    }
+  }
+
+  if (fieldActivo) {
+    fieldActivo.checked = status !== 'inactivo';
+  }
+
+  if (fieldNotas) {
+    fieldNotas.value = notes;
+  }
+
+  if (modalTitle) {
+    modalTitle.textContent = 'Editar tercero';
+  }
+
+  if (modalSubtitle) {
+    const subtitleParts = [];
+    if (taxId) {
+      subtitleParts.push(`ID fiscal: ${taxId}`);
+    }
+    if (nombre) {
+      subtitleParts.push(nombre);
+    }
+
+    modalSubtitle.textContent = subtitleParts.length
+      ? subtitleParts.join(' · ')
+      : 'Actualiza la información del cliente o proveedor seleccionado.';
+  }
+
+  if (modalSubmitButton) {
+    modalSubmitButton.dataset.defaultLabel = 'Guardar cambios';
+    modalSubmitButton.textContent = 'Guardar cambios';
+  }
+
+  isSubmitting = false;
+  setSubmitButtonLoading(false);
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  updateBodyScrollLock();
+
+  fieldNombre?.focus();
+};
+
+const openEditForIdentifier = (identifier) => {
+  if (!identifier) {
+    showToast('No fue posible determinar el tercero seleccionado.', 'error');
+    return;
+  }
+
+  const target = findThirdPartyLocally(identifier);
+
+  if (!target) {
+    showToast('No se encontró la información del tercero seleccionado.', 'error');
+    return;
+  }
+
+  openEditModalForThirdParty(target);
 };
 
 const updateBodyScrollLock = () => {
@@ -1121,6 +1259,10 @@ const openCreateModal = () => {
     return;
   }
 
+  isEditMode = false;
+  currentEditingIdentifier = null;
+  currentEditingThirdParty = null;
+
   modalForm.reset();
   if (fieldRelacion) {
     fieldRelacion.value = 'cliente';
@@ -1135,6 +1277,11 @@ const openCreateModal = () => {
 
   if (modalSubtitle) {
     modalSubtitle.textContent = 'Completa la información del cliente o proveedor para añadirlo al maestro.';
+  }
+
+  if (modalSubmitButton) {
+    modalSubmitButton.dataset.defaultLabel = 'Registrar tercero';
+    modalSubmitButton.textContent = 'Registrar tercero';
   }
 
   isSubmitting = false;
@@ -1160,6 +1307,19 @@ const closeModal = () => {
   modal.classList.remove('flex');
   updateBodyScrollLock();
   modalForm.reset();
+  isEditMode = false;
+  currentEditingIdentifier = null;
+  currentEditingThirdParty = null;
+
+  if (modalSubtitle) {
+    modalSubtitle.textContent = '';
+  }
+
+  if (modalSubmitButton) {
+    modalSubmitButton.dataset.defaultLabel = 'Registrar tercero';
+    modalSubmitButton.textContent = 'Registrar tercero';
+  }
+
   setSubmitButtonLoading(false);
 };
 
@@ -1200,14 +1360,35 @@ const handleFormSubmit = async (event) => {
     notas_internas: notas,
   };
 
-  if (currentAdminId !== null && currentAdminId !== undefined) {
-    payload.created_by = currentAdminId;
-    payload.creado_por = currentAdminId;
-  }
+  if (isEditMode) {
+    if (
+      currentEditingIdentifier === null ||
+      currentEditingIdentifier === undefined ||
+      currentEditingIdentifier === ''
+    ) {
+      showToast('No se pudo determinar el tercero a actualizar.', 'error');
+      return;
+    }
 
-  if (currentAdminName) {
-    payload.created_by_name = currentAdminName;
-    payload.creado_por_nombre = currentAdminName;
+    if (currentAdminId !== null && currentAdminId !== undefined) {
+      payload.updated_by = currentAdminId;
+      payload.modificado_por = currentAdminId;
+    }
+
+    if (currentAdminName) {
+      payload.updated_by_name = currentAdminName;
+      payload.modificado_por_nombre = currentAdminName;
+    }
+  } else {
+    if (currentAdminId !== null && currentAdminId !== undefined) {
+      payload.created_by = currentAdminId;
+      payload.creado_por = currentAdminId;
+    }
+
+    if (currentAdminName) {
+      payload.created_by_name = currentAdminName;
+      payload.creado_por_nombre = currentAdminName;
+    }
   }
 
   const sanitizedPayload = sanitizePayload(payload);
@@ -1215,26 +1396,38 @@ const handleFormSubmit = async (event) => {
   isSubmitting = true;
   setSubmitButtonLoading(true);
 
-  let creationSucceeded = false;
+  let requestSucceeded = false;
+  const method = isEditMode ? 'PUT' : 'POST';
+  const identifierForRequest = isEditMode ? String(currentEditingIdentifier).trim() : '';
+  const pathSuffix = isEditMode ? `/${encodeURIComponent(identifierForRequest)}` : '';
+  const successMessage = isEditMode
+    ? 'Tercero actualizado correctamente.'
+    : 'Tercero registrado correctamente.';
+  const failureMessage = isEditMode
+    ? 'No fue posible actualizar el tercero. Intenta nuevamente.'
+    : 'No fue posible registrar el tercero. Intenta nuevamente.';
+  const unexpectedErrorMessage = isEditMode
+    ? 'Ocurrió un error inesperado al actualizar el tercero.'
+    : 'Ocurrió un error inesperado al registrar el tercero.';
 
   try {
-    const result = await request('POST', '', sanitizedPayload);
+    const result = await request(method, pathSuffix, sanitizedPayload);
 
     if (!result.ok) {
-      const message = result?.data?.message || result?.error || 'No fue posible registrar el tercero. Intenta nuevamente.';
+      const message = result?.data?.message || result?.error || failureMessage;
       showToast(message, 'error');
       return;
     }
 
-    showToast('Tercero registrado correctamente.', 'success');
-    creationSucceeded = true;
+    showToast(successMessage, 'success');
+    requestSucceeded = true;
   } catch (error) {
-    showToast('Ocurrió un error inesperado al registrar el tercero.', 'error');
+    showToast(unexpectedErrorMessage, 'error');
   } finally {
     isSubmitting = false;
     setSubmitButtonLoading(false);
 
-    if (creationSucceeded) {
+    if (requestSucceeded) {
       closeModal();
       fetchThirdParties();
     }
@@ -1328,8 +1521,14 @@ tableBody?.addEventListener('click', (event) => {
     const action = actionButton.getAttribute('data-action');
     const identifier = actionButton.getAttribute('data-id');
 
+    if (action === 'edit') {
+      openEditForIdentifier(identifier);
+      return;
+    }
+
     if (action === 'history') {
       openHistoryForIdentifier(identifier);
+      return;
     }
 
     return;
