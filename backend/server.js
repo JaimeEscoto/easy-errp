@@ -29,6 +29,8 @@ const supabaseClient =
 
 const ARTICULOS_TABLE = 'articulos';
 const ARTICULOS_LOG_TABLE_CANDIDATES = ['articulos_log', 'articulos_logs'];
+const FACTURAS_VENTA_TABLE = 'facturas_venta';
+const LINEAS_FACTURA_TABLE = 'lineas_factura';
 const TERCEROS_TABLE = 'terceros';
 const TERCEROS_LOG_TABLE_CANDIDATES = [
   'terceros_log',
@@ -544,6 +546,205 @@ const recordArticuloLog = async ({
   }
 
   console.error('Record articulo log error: none of the expected log tables are available.');
+};
+
+const normalizeIdentifier = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    const asNumber = Number(trimmed);
+
+    if (!Number.isNaN(asNumber)) {
+      return asNumber;
+    }
+
+    return trimmed;
+  }
+
+  return value;
+};
+
+const interpretThirdPartyActiveState = (thirdParty = {}) => {
+  const activeCandidates = [
+    thirdParty.activo,
+    thirdParty.active,
+    thirdParty.is_active,
+    thirdParty.habilitado,
+    thirdParty.enabled,
+    thirdParty.estado,
+    thirdParty.status,
+  ];
+
+  for (const candidate of activeCandidates) {
+    const normalized = normalizeBoolean(candidate);
+
+    if (normalized !== null) {
+      return normalized;
+    }
+
+    if (typeof candidate === 'string') {
+      const lowered = candidate.trim().toLowerCase();
+
+      if (['activo', 'activa', 'active', 'habilitado'].includes(lowered)) {
+        return true;
+      }
+
+      if (['inactivo', 'inactiva', 'inactive', 'deshabilitado', 'deshabilitada'].includes(lowered)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
+
+const getThirdPartyDisplayName = (thirdParty = {}) => {
+  const candidates = [
+    thirdParty.nombre_comercial,
+    thirdParty.razon_social,
+    thirdParty.nombre,
+    thirdParty.denominacion,
+    thirdParty.display_name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  if (thirdParty.identificacion_fiscal) {
+    return String(thirdParty.identificacion_fiscal);
+  }
+
+  if (thirdParty.id !== undefined && thirdParty.id !== null) {
+    return `Cliente ${thirdParty.id}`;
+  }
+
+  return 'Cliente sin nombre';
+};
+
+const getArticleDisplayName = (article = {}) => {
+  const candidates = [article.nombre, article.descripcion_corta, article.descripcion, article.codigo];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  if (article.id !== undefined && article.id !== null) {
+    return `Artículo ${article.id}`;
+  }
+
+  return 'Artículo sin nombre';
+};
+
+const toNumber = (value, fallback = 0) => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().replace(/,/g, '');
+
+    if (!normalized) {
+      return fallback;
+    }
+
+    const parsed = Number(normalized);
+
+    return Number.isNaN(parsed) ? fallback : parsed;
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+
+  return fallback;
+};
+
+const roundCurrency = (value) => {
+  const normalized = toNumber(value, 0);
+  return Math.round((normalized + Number.EPSILON) * 100) / 100;
+};
+
+const parseDateToIso = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    const dateFromValue = new Date(trimmed);
+
+    if (!Number.isNaN(dateFromValue.getTime())) {
+      return dateFromValue.toISOString();
+    }
+
+    const parts = trimmed.split('-');
+
+    if (parts.length === 3) {
+      const [year, month, day] = parts.map((part) => Number(part));
+
+      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+        const isoDate = new Date(Date.UTC(year, month - 1, day));
+
+        if (!Number.isNaN(isoDate.getTime())) {
+          return isoDate.toISOString();
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
+const calculateInvoiceTotals = (lines = []) => {
+  return lines.reduce(
+    (acc, line) => {
+      const subtotal = roundCurrency(line.subtotal ?? line.cantidad * line.precioUnitario);
+      const taxes = roundCurrency(line.impuestos ?? 0);
+      const total = roundCurrency(line.total ?? subtotal + taxes);
+
+      return {
+        subtotal: roundCurrency(acc.subtotal + subtotal),
+        taxes: roundCurrency(acc.taxes + taxes),
+        total: roundCurrency(acc.total + total),
+      };
+    },
+    { subtotal: 0, taxes: 0, total: 0 }
+  );
 };
 
 const logSupabaseMisconfiguration = () => {
@@ -1184,8 +1385,617 @@ articulosRouter.delete('/:id', async (req, res) => {
   }
 });
 
+const facturasRouter = express.Router();
+
+facturasRouter.use(ensureSupabaseConfigured);
+
+const normalizeInvoiceLineType = (value, hasArticle = false) => {
+  if (typeof value === 'string') {
+    const lowered = value.trim().toLowerCase();
+
+    if (['producto', 'product', 'goods', 'item'].includes(lowered)) {
+      return 'Producto';
+    }
+
+    if (['servicio', 'service'].includes(lowered)) {
+      return 'Servicio';
+    }
+  }
+
+  return hasArticle ? 'Producto' : 'Servicio';
+};
+
+const extractInvoiceClientIdentifier = (payload = {}) => {
+  const candidates = [
+    payload.id_cliente,
+    payload.cliente_id,
+    payload.clienteId,
+    payload.client_id,
+    payload.clientId,
+    payload.tercero_id,
+    payload.terceroId,
+    payload.id_tercero,
+    payload.customer_id,
+    payload.customerId,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) {
+      continue;
+    }
+
+    if (typeof candidate === 'string') {
+      if (candidate.trim()) {
+        return candidate;
+      }
+
+      continue;
+    }
+
+    return candidate;
+  }
+
+  return null;
+};
+
+const extractInvoiceLines = (payload = {}) => {
+  const candidates = [
+    payload.lineas_factura,
+    payload.lineasFactura,
+    payload.detalles,
+    payload.detalle,
+    payload.lineas,
+    payload.items,
+    payload.detalle_factura,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((item) => item !== undefined && item !== null);
+    }
+  }
+
+  return [];
+};
+
+facturasRouter.post('/emitir', async (req, res) => {
+  const payload = req.body ?? {};
+  const actorId = extractActorId(req, payload);
+  const actorName = extractActorName(req, payload);
+  const timestamp = new Date().toISOString();
+
+  const clientIdentifierRaw = extractInvoiceClientIdentifier(payload);
+
+  if (clientIdentifierRaw === null) {
+    return res.status(400).json({ message: 'El identificador del cliente es obligatorio.' });
+  }
+
+  const normalizedClientIdentifier = normalizeIdentifier(clientIdentifierRaw);
+
+  const rawLines = extractInvoiceLines(payload);
+
+  if (!rawLines.length) {
+    return res.status(400).json({ message: 'La factura debe incluir al menos una línea.' });
+  }
+
+  try {
+    const clienteResult = await findThirdPartyByIdentifier(normalizedClientIdentifier);
+
+    if (clienteResult?.error) {
+      console.error('Invoice emission: customer lookup error:', clienteResult.error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while validating customer.', clienteResult.error));
+    }
+
+    const clienteData = clienteResult?.data;
+
+    if (!clienteData) {
+      return res.status(400).json({ message: 'El cliente especificado no existe en el sistema.' });
+    }
+
+    if (!interpretThirdPartyActiveState(clienteData)) {
+      return res.status(400).json({
+        message: `El cliente ${getThirdPartyDisplayName(
+          clienteData
+        )} está inactivo y no puede recibir facturas en este momento.`,
+      });
+    }
+
+    const rollbackInvoiceRecords = async (invoiceId) => {
+      if (!invoiceId) {
+        return;
+      }
+
+      try {
+        await supabaseClient.from(LINEAS_FACTURA_TABLE).delete().eq('id_factura', invoiceId);
+      } catch (rollbackLinesError) {
+        console.error('Invoice emission: error while rolling back invoice lines.', rollbackLinesError);
+      }
+
+      try {
+        await supabaseClient.from(FACTURAS_VENTA_TABLE).delete().eq('id', invoiceId);
+      } catch (rollbackHeaderError) {
+        console.error('Invoice emission: error while rolling back invoice header (id).', rollbackHeaderError);
+      }
+
+      try {
+        await supabaseClient.from(FACTURAS_VENTA_TABLE).delete().eq('factura_id', invoiceId);
+      } catch (rollbackAltError) {
+        if (rollbackAltError?.code !== '42703' && rollbackAltError?.code !== 'PGRST204') {
+          console.error('Invoice emission: error while rolling back invoice header (factura_id).', rollbackAltError);
+        }
+      }
+    };
+
+    const normalizedLines = [];
+
+    for (let index = 0; index < rawLines.length; index += 1) {
+      const rawLine = rawLines[index];
+      const base = rawLine && typeof rawLine === 'object' ? { ...rawLine } : {};
+
+      const articuloIdentifierRaw =
+        base.id_articulo ??
+        base.articulo_id ??
+        base.articuloId ??
+        base.producto_id ??
+        base.productoId ??
+        base.id_producto ??
+        null;
+      const articuloId = normalizeIdentifier(articuloIdentifierRaw);
+
+      const cantidad = toNumber(base.cantidad ?? base.quantity ?? base.cant ?? 0, 0);
+
+      if (cantidad <= 0) {
+        return res.status(400).json({
+          message: `La cantidad de la línea ${index + 1} debe ser mayor a cero.`,
+        });
+      }
+
+      const precioUnitario = roundCurrency(
+        base.precio_unitario ??
+          base.precioUnitario ??
+          base.precio ??
+          base.valor_unitario ??
+          base.valorUnitario ??
+          base.price ??
+          0
+      );
+
+      const impuestos = roundCurrency(
+        base.total_impuestos ??
+          base.totalImpuestos ??
+          base.impuestos ??
+          base.impuesto ??
+          base.tax ??
+          base.taxes ??
+          0
+      );
+
+      const subtotalFromPayload =
+        base.sub_total ?? base.subtotal ?? base.base ?? base.valor_base ?? base.base_imponible ?? null;
+      const subtotal =
+        subtotalFromPayload !== null && subtotalFromPayload !== undefined
+          ? roundCurrency(subtotalFromPayload)
+          : roundCurrency(cantidad * precioUnitario);
+
+      const totalFromPayload =
+        base.total_linea ?? base.totalLinea ?? base.total ?? base.monto_total ?? base.importe_total ?? null;
+      const total =
+        totalFromPayload !== null && totalFromPayload !== undefined
+          ? roundCurrency(totalFromPayload)
+          : roundCurrency(subtotal + impuestos);
+
+      const tipo = normalizeInvoiceLineType(
+        base.tipo ?? base.tipo_linea ?? base.tipoLinea ?? base.item_type ?? base.clase ?? null,
+        articuloId !== null
+      );
+      const tipoNormalized = tipo.trim().toLowerCase();
+
+      if (tipoNormalized === 'producto' && articuloId === null) {
+        return res.status(400).json({
+          message: `La línea ${index + 1} es de tipo Producto y requiere un artículo asociado.`,
+        });
+      }
+
+      const descripcionCandidates = [
+        base.descripcion,
+        base.descripcion_linea,
+        base.descripcionLinea,
+        base.detalle,
+        base.nombre,
+        base.concepto,
+      ];
+      let descripcion = '';
+
+      for (const candidate of descripcionCandidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          descripcion = candidate.trim();
+          break;
+        }
+      }
+
+      normalizedLines.push({
+        index,
+        articuloId,
+        articuloKey: articuloId === null || articuloId === undefined ? null : String(articuloId),
+        cantidad,
+        precioUnitario,
+        impuestos,
+        subtotal,
+        total,
+        tipo,
+        tipoNormalized,
+        descripcion,
+        raw: base,
+      });
+    }
+
+    const productLines = normalizedLines.filter((line) => line.tipoNormalized === 'producto');
+    const articuloIds = Array.from(
+      new Set(
+        productLines
+          .map((line) => line.articuloId)
+          .filter((value) => value !== null && value !== undefined)
+      )
+    );
+
+    const articuloLookup = new Map();
+
+    if (articuloIds.length) {
+      let articulosData = [];
+
+      const { data: byIdData, error: byIdError } = await supabaseClient
+        .from(ARTICULOS_TABLE)
+        .select('id, articulo_id, existencia, nombre, codigo, descripcion, tipo')
+        .in('id', articuloIds);
+
+      if (byIdError && byIdError.code !== 'PGRST116' && byIdError.code !== 'PGRST204') {
+        console.error('Invoice emission inventory lookup error (id):', byIdError);
+      } else if (byIdData) {
+        articulosData = byIdData;
+      }
+
+      const knownKeys = new Set();
+
+      for (const articulo of articulosData ?? []) {
+        const primaryId = articulo?.id ?? articulo?.articulo_id;
+
+        if (primaryId === undefined || primaryId === null) {
+          continue;
+        }
+
+        const key = String(primaryId);
+        articuloLookup.set(key, articulo);
+        knownKeys.add(key);
+      }
+
+      const missingKeys = articuloIds
+        .map((identifier) => String(identifier))
+        .filter((key) => !knownKeys.has(key));
+
+      if (missingKeys.length) {
+        const { data: byAltData, error: byAltError } = await supabaseClient
+          .from(ARTICULOS_TABLE)
+          .select('id, articulo_id, existencia, nombre, codigo, descripcion, tipo')
+          .in('articulo_id', missingKeys);
+
+        if (byAltError && byAltError.code !== '42703' && byAltError.code !== 'PGRST204') {
+          console.error('Invoice emission inventory lookup error (articulo_id):', byAltError);
+          return res
+            .status(500)
+            .json(formatUnexpectedErrorResponse('Unexpected error while validating inventory.', byAltError));
+        }
+
+        for (const articulo of byAltData ?? []) {
+          const primaryId = articulo?.id ?? articulo?.articulo_id;
+
+          if (primaryId === undefined || primaryId === null) {
+            continue;
+          }
+
+          articuloLookup.set(String(primaryId), articulo);
+        }
+      }
+
+      for (const line of productLines) {
+        const article = articuloLookup.get(line.articuloKey ?? '');
+
+        if (!article) {
+          return res.status(400).json({
+            message: `El artículo asociado a la línea ${line.index + 1} no existe.`,
+            articuloId: line.articuloId,
+          });
+        }
+
+        const available = roundCurrency(article.existencia ?? 0);
+
+        if (line.cantidad > available) {
+          return res.status(409).json({
+            message: `Stock insuficiente para ${getArticleDisplayName(article)}. Disponible: ${available}, requerido: ${line.cantidad}.`,
+            articuloId: line.articuloId,
+            disponible: available,
+            requerido: line.cantidad,
+          });
+        }
+      }
+    }
+
+    const totals = calculateInvoiceTotals(normalizedLines);
+
+    const headerPayload = { ...payload };
+    delete headerPayload.lineas_factura;
+    delete headerPayload.lineasFactura;
+    delete headerPayload.detalle;
+    delete headerPayload.detalles;
+    delete headerPayload.lineas;
+    delete headerPayload.items;
+    delete headerPayload.detalle_factura;
+    delete headerPayload.clienteId;
+    delete headerPayload.clientId;
+    delete headerPayload.customerId;
+    delete headerPayload.customer_id;
+    delete headerPayload.terceroId;
+
+    headerPayload.id_cliente =
+      headerPayload.id_cliente ?? clienteData?.id ?? clienteData?.tercero_id ?? normalizedClientIdentifier;
+    headerPayload.cliente_id = headerPayload.cliente_id ?? headerPayload.id_cliente;
+    headerPayload.tercero_id = headerPayload.tercero_id ?? headerPayload.id_cliente;
+    headerPayload.estado = headerPayload.estado ?? headerPayload.status ?? 'Emitida';
+
+    const fechaIso =
+      parseDateToIso(
+        headerPayload.fecha ??
+          headerPayload.fecha_emision ??
+          payload.fecha ??
+          payload.fecha_emision ??
+          headerPayload.fechaFactura ??
+          payload.fechaFactura
+      ) ?? timestamp;
+    headerPayload.fecha = fechaIso;
+    delete headerPayload.fecha_emision;
+    delete headerPayload.fechaFactura;
+    delete headerPayload.status;
+
+    if (headerPayload.sub_total === undefined || headerPayload.sub_total === null) {
+      headerPayload.sub_total = totals.subtotal;
+    }
+
+    if (headerPayload.total_impuestos === undefined || headerPayload.total_impuestos === null) {
+      headerPayload.total_impuestos = totals.taxes;
+    }
+
+    if (headerPayload.total === undefined || headerPayload.total === null) {
+      headerPayload.total = totals.total;
+    }
+
+    if (actorId !== null && actorId !== undefined) {
+      headerPayload.creado_por = headerPayload.creado_por ?? actorId;
+      headerPayload.modificado_por = headerPayload.modificado_por ?? actorId;
+    }
+
+    if (actorName) {
+      headerPayload.creado_por_nombre = headerPayload.creado_por_nombre ?? actorName;
+      headerPayload.modificado_por_nombre = headerPayload.modificado_por_nombre ?? actorName;
+    }
+
+    headerPayload.creado_en = headerPayload.creado_en ?? timestamp;
+    headerPayload.modificado_en = headerPayload.modificado_en ?? timestamp;
+    headerPayload.actualizado_en = headerPayload.actualizado_en ?? timestamp;
+    headerPayload.updated_at = headerPayload.updated_at ?? timestamp;
+
+    const cleanedHeaderPayload = Object.fromEntries(
+      Object.entries(headerPayload).filter(([, value]) => value !== undefined)
+    );
+
+    let facturaId = null;
+
+    const { data: facturaData, error: facturaError } = await supabaseClient
+      .from(FACTURAS_VENTA_TABLE)
+      .insert([cleanedHeaderPayload])
+      .select()
+      .maybeSingle();
+
+    if (facturaError) {
+      console.error('Invoice emission: header insertion failed.', facturaError);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating invoice header.', facturaError));
+    }
+
+    facturaId =
+      facturaData?.id ??
+      facturaData?.factura_id ??
+      cleanedHeaderPayload?.id ??
+      cleanedHeaderPayload?.factura_id ??
+      null;
+
+    if (!facturaId) {
+      console.warn('Invoice emission: inserted invoice without an explicit identifier, attempting recovery.');
+      const { data: recoveredInvoice, error: recoveryError } = await supabaseClient
+        .from(FACTURAS_VENTA_TABLE)
+        .select('*')
+        .order('creado_en', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recoveryError) {
+        console.error('Invoice emission: unable to recover invoice identifier.', recoveryError);
+        return res.status(500).json({ message: 'No fue posible recuperar el identificador de la factura.' });
+      }
+
+      facturaId = recoveredInvoice?.id ?? recoveredInvoice?.factura_id ?? null;
+
+      if (!facturaId) {
+        return res.status(500).json({ message: 'No fue posible determinar el identificador de la factura.' });
+      }
+    }
+
+    let facturaRecord = facturaData ?? null;
+
+    if (!facturaRecord) {
+      const { data: refetchedInvoice, error: refetchInvoiceError } = await supabaseClient
+        .from(FACTURAS_VENTA_TABLE)
+        .select('*')
+        .eq('id', facturaId)
+        .maybeSingle();
+
+      if (!refetchInvoiceError && refetchedInvoice) {
+        facturaRecord = refetchedInvoice;
+      } else if (refetchInvoiceError && refetchInvoiceError.code !== 'PGRST116') {
+        console.error('Invoice emission: unable to refetch invoice after insert.', refetchInvoiceError);
+      }
+    }
+
+    const detailPayloads = normalizedLines.map((line) => {
+      const detail = {
+        id_factura: facturaId,
+        tipo: line.tipo,
+        cantidad: line.cantidad,
+        precio_unitario: line.precioUnitario,
+        total_linea: line.total,
+        total_impuestos: line.impuestos,
+        descripcion: line.descripcion || null,
+        creado_en: timestamp,
+      };
+
+      if (line.articuloId !== null && line.articuloId !== undefined) {
+        detail.id_articulo = line.articuloId;
+      }
+
+      if (actorId !== null && actorId !== undefined) {
+        detail.creado_por = actorId;
+      }
+
+      if (actorName) {
+        detail.creado_por_nombre = actorName;
+      }
+
+      return Object.fromEntries(Object.entries(detail).filter(([, value]) => value !== undefined));
+    });
+
+    const { data: lineasData, error: lineasError } = await supabaseClient
+      .from(LINEAS_FACTURA_TABLE)
+      .insert(detailPayloads)
+      .select();
+
+    if (lineasError) {
+      console.error('Invoice emission: detail insertion failed, triggering rollback.', lineasError);
+      await rollbackInvoiceRecords(facturaId);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating invoice details.', lineasError));
+    }
+
+    const revertStockChanges = async (adjustments = []) => {
+      for (const adjustment of adjustments.slice().reverse()) {
+        try {
+          const revertPayload = {
+            existencia: adjustment.previousExistence,
+            modificado_en: timestamp,
+          };
+
+          if (actorId !== null && actorId !== undefined) {
+            revertPayload.modificado_por = actorId;
+          }
+
+          if (actorName) {
+            revertPayload.modificado_por_nombre = actorName;
+          }
+
+          await supabaseClient
+            .from(ARTICULOS_TABLE)
+            .update(revertPayload)
+            .eq(adjustment.identifierColumn, adjustment.identifierValue);
+        } catch (revertError) {
+          console.error('Invoice emission: error while reverting stock adjustment.', revertError);
+        }
+      }
+    };
+
+    const stockAdjustments = [];
+
+    for (const line of productLines) {
+      const article = articuloLookup.get(line.articuloKey ?? '');
+
+      if (!article) {
+        continue;
+      }
+
+      const previousExistence = roundCurrency(article.existencia ?? 0);
+      const newExistence = roundCurrency(previousExistence - line.cantidad);
+
+      const updatePayload = {
+        existencia: newExistence,
+        modificado_en: timestamp,
+      };
+
+      if (actorId !== null && actorId !== undefined) {
+        updatePayload.modificado_por = actorId;
+      }
+
+      if (actorName) {
+        updatePayload.modificado_por_nombre = actorName;
+      }
+
+      const identifierColumn = article.id !== undefined && article.id !== null ? 'id' : 'articulo_id';
+      const identifierValue = identifierColumn === 'id' ? article.id : article.articulo_id;
+
+      const { data: updatedArticle, error: stockError } = await supabaseClient
+        .from(ARTICULOS_TABLE)
+        .update(updatePayload)
+        .eq(identifierColumn, identifierValue)
+        .select()
+        .maybeSingle();
+
+      if (stockError) {
+        console.error('Invoice emission: stock update failed, triggering rollback.', stockError);
+        await revertStockChanges(stockAdjustments);
+        await rollbackInvoiceRecords(facturaId);
+        return res
+          .status(500)
+          .json(formatUnexpectedErrorResponse('Unexpected error while updating inventory.', stockError));
+      }
+
+      const safeUpdatedArticle = updatedArticle ?? { ...article, existencia: newExistence };
+
+      await recordArticuloLog({
+        articuloId: safeUpdatedArticle?.id ?? identifierValue,
+        action: 'stock-adjust',
+        actorId,
+        actorName,
+        previousData: article,
+        newData: safeUpdatedArticle,
+        changes: computeArticuloChanges(article, safeUpdatedArticle),
+      });
+
+      stockAdjustments.push({
+        identifierColumn,
+        identifierValue,
+        previousExistence,
+      });
+
+      articuloLookup.set(line.articuloKey ?? '', safeUpdatedArticle);
+    }
+
+    return res.status(201).json({
+      message: 'Factura emitida correctamente.',
+      factura: facturaRecord ?? facturaData ?? cleanedHeaderPayload,
+      lineas: lineasData ?? [],
+      totales: totals,
+      cliente: clienteData,
+    });
+  } catch (err) {
+    console.error('Unhandled invoice emission error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while emitting invoice.', err));
+  }
+});
+
 app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
+app.use('/api/facturas', facturasRouter);
 
 app.post('/api/login', async (req, res) => {
   if (!supabaseClient) {
