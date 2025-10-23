@@ -118,7 +118,7 @@ const extractActorId = (req, payload = {}) => {
     }
   }
 
-  const bodyCandidates = ['updated_by', 'modified_by', 'changed_by', 'created_by', 'admin_id', 'user_id'];
+  const bodyCandidates = ['modificado_por', 'creado_por', 'admin_id', 'user_id'];
 
   for (const key of bodyCandidates) {
     const value = payload?.[key] ?? req.body?.[key];
@@ -143,9 +143,9 @@ const extractActorName = (req, payload = {}) => {
   }
 
   const bodyCandidates = [
-    'updated_by_name',
-    'updated_by_label',
-    'modified_by_name',
+    'modificado_por_nombre',
+    'modificado_por_label',
+    'creado_por_nombre',
     'actor_name',
     'actor_label',
     'admin_name',
@@ -171,8 +171,8 @@ const TRACKED_FIELDS = [
   'existencia',
   'unidad',
   'activo',
-  'created_by',
-  'updated_by',
+  'creado_por',
+  'modificado_por',
 ];
 
 const TERCEROS_TRACKED_FIELDS = [
@@ -189,8 +189,8 @@ const TERCEROS_TRACKED_FIELDS = [
   'estado',
   'notas',
   'notas_internas',
-  'created_by',
-  'updated_by',
+  'creado_por',
+  'modificado_por',
 ];
 
 const computeArticuloChanges = (previousData = {}, newData = {}) => {
@@ -375,12 +375,9 @@ const sanitizeThirdPartyPayloadForUpdate = (input = {}) => {
   delete payload.id;
   delete payload.tercero_id;
   delete payload.terceroId;
-  delete payload.created_by;
   delete payload.creado_por;
-  delete payload.created_by_name;
   delete payload.creado_por_nombre;
   delete payload.creado_en;
-  delete payload.created_at;
 
   return payload;
 };
@@ -747,16 +744,12 @@ tercerosRouter.post('/', async (req, res) => {
     const timestamp = new Date().toISOString();
 
     if (actorId !== null && actorId !== undefined) {
-      payload.created_by = actorId;
       payload.creado_por = actorId;
-      payload.updated_by = actorId;
       payload.modificado_por = actorId;
     }
 
     if (actorName) {
-      payload.created_by_name = actorName;
       payload.creado_por_nombre = actorName;
-      payload.updated_by_name = actorName;
       payload.modificado_por_nombre = actorName;
     }
 
@@ -822,12 +815,10 @@ tercerosRouter.put('/:id', async (req, res) => {
     const timestamp = new Date().toISOString();
 
     if (actorId !== null && actorId !== undefined) {
-      payload.updated_by = actorId;
       payload.modificado_por = actorId;
     }
 
     if (actorName) {
-      payload.updated_by_name = actorName;
       payload.modificado_por_nombre = actorName;
     }
 
@@ -1049,7 +1040,6 @@ articulosRouter.put('/:id', async (req, res) => {
 
     if (actorId !== null && actorId !== undefined) {
       updatesWithAudit.modificado_por = actorId;
-      updatesWithAudit.updated_by = actorId;
     }
 
     updatesWithAudit.modificado_en = new Date().toISOString();

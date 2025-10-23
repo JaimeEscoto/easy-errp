@@ -459,9 +459,10 @@ const extractHistoryActor = (entry) => {
     'realizado_por_label',
     'realizado_por',
     'actor_id',
-    'updated_by',
+    'modificado_por_nombre',
     'modificado_por',
-    'created_by',
+    'creado_por_nombre',
+    'creado_por',
     'admin_id',
     'usuario',
     'user_id',
@@ -1371,22 +1372,18 @@ const handleFormSubmit = async (event) => {
     }
 
     if (currentAdminId !== null && currentAdminId !== undefined) {
-      payload.updated_by = currentAdminId;
       payload.modificado_por = currentAdminId;
     }
 
     if (currentAdminName) {
-      payload.updated_by_name = currentAdminName;
       payload.modificado_por_nombre = currentAdminName;
     }
   } else {
     if (currentAdminId !== null && currentAdminId !== undefined) {
-      payload.created_by = currentAdminId;
       payload.creado_por = currentAdminId;
     }
 
     if (currentAdminName) {
-      payload.created_by_name = currentAdminName;
       payload.creado_por_nombre = currentAdminName;
     }
   }
