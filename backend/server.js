@@ -109,6 +109,99 @@ const normalizeActorName = (value) => {
   return String(value);
 };
 
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+
+const coerceToNumericId = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'bigint') {
+    const asNumber = Number(value);
+    return Number.isNaN(asNumber) || !Number.isFinite(asNumber) ? null : asNumber;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    if (!/^\d+$/.test(trimmed)) {
+      return null;
+    }
+
+    const asNumber = Number(trimmed);
+
+    return Number.isNaN(asNumber) || !Number.isFinite(asNumber) ? null : asNumber;
+  }
+
+  return null;
+};
+
+const sanitizeNumericAuditFields = (payload, fields = []) => {
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+
+  for (const field of fields) {
+    if (!hasOwn(payload, field)) {
+      continue;
+    }
+
+    const normalized = coerceToNumericId(payload[field]);
+
+    if (normalized === null) {
+      delete payload[field];
+    } else {
+      payload[field] = normalized;
+    }
+  }
+};
+
+const applyActorAuditFields = (
+  payload,
+  actorId,
+  { includeCreated = true, includeUpdated = true } = {}
+) => {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const targetFields = [];
+
+  if (includeCreated) {
+    targetFields.push('creado_por');
+  }
+
+  if (includeUpdated) {
+    targetFields.push('modificado_por');
+  }
+
+  sanitizeNumericAuditFields(payload, targetFields);
+
+  const numericActorId = coerceToNumericId(actorId);
+
+  if (numericActorId === null) {
+    return payload;
+  }
+
+  if (includeCreated && !hasOwn(payload, 'creado_por')) {
+    payload.creado_por = numericActorId;
+  }
+
+  if (includeUpdated && !hasOwn(payload, 'modificado_por')) {
+    payload.modificado_por = numericActorId;
+  }
+
+  return payload;
+};
+
 const extractActorId = (req, payload = {}) => {
   const headerCandidates = ['x-admin-id', 'x-user-id', 'x-actor-id'];
 
@@ -944,10 +1037,7 @@ tercerosRouter.post('/', async (req, res) => {
 
     const timestamp = new Date().toISOString();
 
-    if (actorId !== null && actorId !== undefined) {
-      payload.creado_por = actorId;
-      payload.modificado_por = actorId;
-    }
+    applyActorAuditFields(payload, actorId);
 
     if (actorName) {
       payload.creado_por_nombre = actorName;
@@ -1015,9 +1105,7 @@ tercerosRouter.put('/:id', async (req, res) => {
 
     const timestamp = new Date().toISOString();
 
-    if (actorId !== null && actorId !== undefined) {
-      payload.modificado_por = actorId;
-    }
+    applyActorAuditFields(payload, actorId, { includeCreated: false });
 
     if (actorName) {
       payload.modificado_por_nombre = actorName;
@@ -1239,9 +1327,7 @@ articulosRouter.put('/:id', async (req, res) => {
       delete updatesWithAudit.id;
     }
 
-    if (actorId !== null && actorId !== undefined) {
-      updatesWithAudit.modificado_por = actorId;
-    }
+    applyActorAuditFields(updatesWithAudit, actorId, { includeCreated: false });
 
     updatesWithAudit.modificado_en = new Date().toISOString();
 
@@ -1785,10 +1871,7 @@ facturasRouter.post('/emitir', async (req, res) => {
       headerPayload.total = totals.total;
     }
 
-    if (actorId !== null && actorId !== undefined) {
-      headerPayload.creado_por = headerPayload.creado_por ?? actorId;
-      headerPayload.modificado_por = headerPayload.modificado_por ?? actorId;
-    }
+    applyActorAuditFields(headerPayload, actorId);
 
     if (actorName) {
       headerPayload.creado_por_nombre = headerPayload.creado_por_nombre ?? actorName;
@@ -1879,9 +1962,7 @@ facturasRouter.post('/emitir', async (req, res) => {
         detail.id_articulo = line.articuloId;
       }
 
-      if (actorId !== null && actorId !== undefined) {
-        detail.creado_por = actorId;
-      }
+      applyActorAuditFields(detail, actorId, { includeUpdated: false });
 
       if (actorName) {
         detail.creado_por_nombre = actorName;
@@ -1911,9 +1992,7 @@ facturasRouter.post('/emitir', async (req, res) => {
             modificado_en: timestamp,
           };
 
-          if (actorId !== null && actorId !== undefined) {
-            revertPayload.modificado_por = actorId;
-          }
+          applyActorAuditFields(revertPayload, actorId, { includeCreated: false });
 
           if (actorName) {
             revertPayload.modificado_por_nombre = actorName;
@@ -1946,9 +2025,7 @@ facturasRouter.post('/emitir', async (req, res) => {
         modificado_en: timestamp,
       };
 
-      if (actorId !== null && actorId !== undefined) {
-        updatePayload.modificado_por = actorId;
-      }
+      applyActorAuditFields(updatePayload, actorId, { includeCreated: false });
 
       if (actorName) {
         updatePayload.modificado_por_nombre = actorName;
