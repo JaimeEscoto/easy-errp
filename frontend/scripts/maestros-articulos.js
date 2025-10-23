@@ -450,9 +450,10 @@ const extractHistoryActor = (entry) => {
     'realizado_por_label',
     'realizado_por',
     'actor_id',
-    'updated_by',
+    'modificado_por_nombre',
     'modificado_por',
-    'created_by',
+    'creado_por_nombre',
+    'creado_por',
     'admin_id',
     'usuario',
     'user_id',
@@ -1043,10 +1044,10 @@ const getFormPayload = () => {
     const numericAdminId = Number(currentAdminId);
     const adminIdValue = Number.isNaN(numericAdminId) ? currentAdminId : numericAdminId;
 
-    payload.updated_by = adminIdValue;
+    payload.modificado_por = adminIdValue;
 
     if (!currentArticleId) {
-      payload.created_by = adminIdValue;
+      payload.creado_por = adminIdValue;
     }
   }
 
