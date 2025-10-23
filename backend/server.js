@@ -1647,7 +1647,7 @@ facturasRouter.post('/emitir', async (req, res) => {
 
       const { data: byIdData, error: byIdError } = await supabaseClient
         .from(ARTICULOS_TABLE)
-        .select('id, articulo_id, existencia, nombre, codigo, descripcion, tipo')
+        .select('id, existencia, nombre, codigo, descripcion, tipo')
         .in('id', articuloIds);
 
       if (byIdError && byIdError.code !== 'PGRST116' && byIdError.code !== 'PGRST204') {
@@ -1659,7 +1659,7 @@ facturasRouter.post('/emitir', async (req, res) => {
       const knownKeys = new Set();
 
       for (const articulo of articulosData ?? []) {
-        const primaryId = articulo?.id ?? articulo?.articulo_id;
+        const primaryId = articulo?.id;
 
         if (primaryId === undefined || primaryId === null) {
           continue;
@@ -1675,27 +1675,10 @@ facturasRouter.post('/emitir', async (req, res) => {
         .filter((key) => !knownKeys.has(key));
 
       if (missingKeys.length) {
-        const { data: byAltData, error: byAltError } = await supabaseClient
-          .from(ARTICULOS_TABLE)
-          .select('id, articulo_id, existencia, nombre, codigo, descripcion, tipo')
-          .in('articulo_id', missingKeys);
-
-        if (byAltError && byAltError.code !== '42703' && byAltError.code !== 'PGRST204') {
-          console.error('Invoice emission inventory lookup error (articulo_id):', byAltError);
-          return res
-            .status(500)
-            .json(formatUnexpectedErrorResponse('Unexpected error while validating inventory.', byAltError));
-        }
-
-        for (const articulo of byAltData ?? []) {
-          const primaryId = articulo?.id ?? articulo?.articulo_id;
-
-          if (primaryId === undefined || primaryId === null) {
-            continue;
-          }
-
-          articuloLookup.set(String(primaryId), articulo);
-        }
+        console.warn(
+          'Invoice emission inventory lookup warning: some requested articles were not found by id.',
+          missingKeys
+        );
       }
 
       for (const line of productLines) {
@@ -1938,13 +1921,29 @@ facturasRouter.post('/emitir', async (req, res) => {
         updatePayload.modificado_por_nombre = actorName;
       }
 
-      const identifierColumn = article.id !== undefined && article.id !== null ? 'id' : 'articulo_id';
-      const identifierValue = identifierColumn === 'id' ? article.id : article.articulo_id;
+      const identifierValue = article.id;
+
+      if (identifierValue === undefined || identifierValue === null) {
+        console.error(
+          'Invoice emission: unable to update stock for articulo without an id.',
+          article
+        );
+        await revertStockChanges(stockAdjustments);
+        await rollbackInvoiceRecords(facturaId);
+        return res
+          .status(500)
+          .json(
+            formatUnexpectedErrorResponse(
+              'Unexpected error while updating inventory: artículo sin identificador.',
+              new Error('Missing articulo id')
+            )
+          );
+      }
 
       const { data: updatedArticle, error: stockError } = await supabaseClient
         .from(ARTICULOS_TABLE)
         .update(updatePayload)
-        .eq(identifierColumn, identifierValue)
+        .eq('id', identifierValue)
         .select()
         .maybeSingle();
 
@@ -1970,7 +1969,7 @@ facturasRouter.post('/emitir', async (req, res) => {
       });
 
       stockAdjustments.push({
-        identifierColumn,
+        identifierColumn: 'id',
         identifierValue,
         previousExistence,
       });
