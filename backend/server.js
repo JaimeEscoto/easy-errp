@@ -1647,7 +1647,7 @@ facturasRouter.post('/emitir', async (req, res) => {
 
       const { data: byIdData, error: byIdError } = await supabaseClient
         .from(ARTICULOS_TABLE)
-        .select('id, existencia, nombre, codigo, descripcion, tipo')
+        .select('id, existencia, nombre, codigo, descripcion, precio, unidad, activo')
         .in('id', articuloIds);
 
       if (byIdError && byIdError.code !== 'PGRST116' && byIdError.code !== 'PGRST204') {
@@ -1700,6 +1700,39 @@ facturasRouter.post('/emitir', async (req, res) => {
             disponible: available,
             requerido: line.cantidad,
           });
+        }
+
+        if (!line.descripcion || !line.descripcion.trim()) {
+          const descriptionCandidates = [
+            article.descripcion,
+            article.nombre,
+            article.codigo,
+          ];
+
+          const descriptionCandidate = descriptionCandidates.find(
+            (candidate) => typeof candidate === 'string' && candidate.trim()
+          );
+
+          if (descriptionCandidate) {
+            line.descripcion = descriptionCandidate.trim();
+          }
+        }
+
+        const rawArticlePrice =
+          article?.precio ?? article?.precio_unitario ?? article?.precioUnitario ?? null;
+
+        if (
+          (line.precioUnitario === null || line.precioUnitario === undefined || line.precioUnitario <= 0) &&
+          rawArticlePrice !== null &&
+          rawArticlePrice !== undefined
+        ) {
+          const normalizedPrice = roundCurrency(rawArticlePrice);
+
+          if (normalizedPrice > 0) {
+            line.precioUnitario = normalizedPrice;
+            line.subtotal = roundCurrency(line.cantidad * line.precioUnitario);
+            line.total = roundCurrency(line.subtotal + line.impuestos);
+          }
         }
       }
     }
