@@ -160,6 +160,7 @@ export const applyTheme = (theme = getTheme()) => {
   const normalized = sanitizeTheme(theme);
   const palette = getPalette(normalized.paletteId);
   const root = typeof document !== 'undefined' ? document.documentElement : null;
+  const body = typeof document !== 'undefined' ? document.body : null;
 
   if (!root) {
     return normalized;
@@ -168,8 +169,16 @@ export const applyTheme = (theme = getTheme()) => {
   cachedTheme = { ...normalized };
 
   root.dataset.themePalette = palette.id;
+  root.dataset.themeMode = normalized.mode;
   root.classList.remove('theme-light', 'theme-dark');
   root.classList.add(normalized.mode === 'dark' ? 'theme-dark' : 'theme-light');
+
+  if (body) {
+    body.dataset.themePalette = palette.id;
+    body.dataset.themeMode = normalized.mode;
+    body.classList.remove('theme-light', 'theme-dark');
+    body.classList.add(normalized.mode === 'dark' ? 'theme-dark' : 'theme-light');
+  }
 
   notify(normalized);
   return normalized;
