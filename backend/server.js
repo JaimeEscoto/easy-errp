@@ -369,6 +369,79 @@ const sanitizeThirdPartyPayloadForInsert = (input = {}) => {
   return payload;
 };
 
+const sanitizeThirdPartyPayloadForUpdate = (input = {}) => {
+  const payload = sanitizeThirdPartyPayloadForInsert(input);
+
+  delete payload.id;
+  delete payload.tercero_id;
+  delete payload.terceroId;
+  delete payload.created_by;
+  delete payload.creado_por;
+  delete payload.created_by_name;
+  delete payload.creado_por_nombre;
+  delete payload.creado_en;
+  delete payload.created_at;
+
+  return payload;
+};
+
+const findThirdPartyByIdentifier = async (identifier) => {
+  if (identifier === undefined || identifier === null || identifier === '') {
+    return { data: null, column: null, value: null };
+  }
+
+  const rawIdentifier = typeof identifier === 'string' ? identifier.trim() : identifier;
+
+  const candidates = [
+    { column: 'id', transform: (value) => {
+      if (typeof value === 'number') {
+        return value;
+      }
+      const asNumber = Number(value);
+      return Number.isNaN(asNumber) ? null : asNumber;
+    } },
+    { column: 'tercero_id', transform: (value) => {
+      if (typeof value === 'number') {
+        return value;
+      }
+      const asNumber = Number(value);
+      return Number.isNaN(asNumber) ? null : asNumber;
+    } },
+    { column: 'identificacion_fiscal' },
+    { column: 'identificacion' },
+    { column: 'nit' },
+    { column: 'numero_identificacion' },
+  ];
+
+  for (const candidate of candidates) {
+    const value = candidate.transform ? candidate.transform(rawIdentifier) : rawIdentifier;
+
+    if (value === null || value === undefined || value === '') {
+      continue;
+    }
+
+    const { data, error } = await supabaseClient
+      .from(TERCEROS_TABLE)
+      .select('*')
+      .eq(candidate.column, value)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === 'PGRST301' || error.code === 'PGRST302') {
+        continue;
+      }
+
+      return { data: null, column: null, value: null, error };
+    }
+
+    if (data) {
+      return { data, column: candidate.column, value };
+    }
+  }
+
+  return { data: null, column: null, value: null };
+};
+
 const formatActorLabel = (actorId, actorName) => {
   const normalizedId = actorId === undefined || actorId === null ? '' : String(actorId).trim();
   const normalizedName = normalizeActorName(actorName) ?? '';
@@ -717,6 +790,89 @@ tercerosRouter.post('/', async (req, res) => {
     return res
       .status(500)
       .json(formatUnexpectedErrorResponse('Unexpected error while creating third party.', err));
+  }
+});
+
+tercerosRouter.put('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: 'El identificador del tercero es obligatorio.' });
+  }
+
+  try {
+    const lookupResult = await findThirdPartyByIdentifier(id);
+
+    if (lookupResult?.error) {
+      console.error('Find tercero for update error:', lookupResult.error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while updating third party.', lookupResult.error));
+    }
+
+    if (!lookupResult?.data || !lookupResult?.column) {
+      return res.status(404).json({ message: 'El tercero especificado no existe.' });
+    }
+
+    const incoming = req.body ?? {};
+    const actorId = extractActorId(req, incoming);
+    const actorName = extractActorName(req, incoming);
+    const payload = sanitizeThirdPartyPayloadForUpdate({ ...incoming });
+
+    const timestamp = new Date().toISOString();
+
+    if (actorId !== null && actorId !== undefined) {
+      payload.updated_by = actorId;
+      payload.modificado_por = actorId;
+    }
+
+    if (actorName) {
+      payload.updated_by_name = actorName;
+      payload.modificado_por_nombre = actorName;
+    }
+
+    payload.modificado_en = timestamp;
+    payload.actualizado_en = payload.actualizado_en ?? timestamp;
+    payload.updated_at = payload.updated_at ?? timestamp;
+
+    const { data, error } = await supabaseClient
+      .from(TERCEROS_TABLE)
+      .update(payload)
+      .eq(lookupResult.column, lookupResult.value)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === 'PGRST301' || error.code === 'PGRST302') {
+        return res.status(404).json({ message: 'No se encontró el tercero a actualizar.' });
+      }
+
+      console.error('Update tercero error:', error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while updating third party.', error));
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: 'No se encontró el tercero a actualizar.' });
+    }
+
+    await recordTerceroLog({
+      terceroId: data?.id ?? lookupResult.data?.id ?? lookupResult.data?.tercero_id ?? null,
+      action: 'update',
+      actorId,
+      actorName,
+      previousData: lookupResult.data,
+      newData: data,
+      changes: computeTerceroChanges(lookupResult.data, data),
+    });
+
+    return res.json(data);
+  } catch (err) {
+    console.error('Unhandled update tercero error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while updating third party.', err));
   }
 });
 
