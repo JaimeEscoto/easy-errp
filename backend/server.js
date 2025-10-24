@@ -31,6 +31,8 @@ const ARTICULOS_TABLE = 'articulos';
 const ARTICULOS_LOG_TABLE_CANDIDATES = ['articulos_log', 'articulos_logs'];
 const FACTURAS_VENTA_TABLE = 'facturas_venta';
 const LINEAS_FACTURA_TABLE = 'lineas_factura';
+const ORDENES_COMPRA_TABLE = 'ordenes_compra';
+const LINEAS_ORDEN_COMPRA_TABLE = 'lineas_orden_compra';
 const TERCEROS_TABLE = 'terceros';
 const TERCEROS_LOG_TABLE_CANDIDATES = [
   'terceros_log',
@@ -2240,9 +2242,418 @@ facturasRouter.post('/emitir', async (req, res) => {
   }
 });
 
+const ordenesCompraRouter = express.Router();
+
+ordenesCompraRouter.use(ensureSupabaseConfigured);
+
+const extractPurchaseOrderLines = (payload = {}) => {
+  const candidates = [
+    payload.lineas_orden,
+    payload.lineasOrden,
+    payload.detalle,
+    payload.detalles,
+    payload.lineas,
+    payload.items,
+    payload.line_items,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((item) => item !== undefined && item !== null);
+    }
+  }
+
+  return [];
+};
+
+const normalizePurchaseOrderLineType = (value, hasArticle = false) => {
+  if (typeof value === 'string') {
+    const lowered = value.trim().toLowerCase();
+
+    if (['producto', 'product', 'goods', 'item'].includes(lowered)) {
+      return 'Producto';
+    }
+
+    if (['servicio', 'service'].includes(lowered)) {
+      return 'Servicio';
+    }
+
+    if (['gasto', 'expense'].includes(lowered)) {
+      return 'Gasto';
+    }
+  }
+
+  return hasArticle ? 'Producto' : 'Servicio';
+};
+
+ordenesCompraRouter.post('/', async (req, res) => {
+  const payload = req.body && typeof req.body === 'object' ? { ...req.body } : {};
+
+  const supplierIdentifierRaw =
+    payload.id_proveedor ??
+    payload.proveedor_id ??
+    payload.supplier_id ??
+    payload.supplierId ??
+    payload.idProveedor ??
+    null;
+
+  const supplierId = coerceToNumericId(supplierIdentifierRaw);
+
+  if (supplierId === null) {
+    return res.status(400).json({ message: 'El proveedor es obligatorio.' });
+  }
+
+  const rawLines = extractPurchaseOrderLines(payload);
+
+  if (!rawLines.length) {
+    return res.status(400).json({ message: 'La orden debe incluir al menos una línea.' });
+  }
+
+  const roundTo = (value, decimals) => {
+    const factor = 10 ** decimals;
+    const numericValue = Number.isFinite(value) ? value : toNumber(value, 0);
+    return Math.round((numericValue + Number.EPSILON) * factor) / factor;
+  };
+
+  const normalizedLines = [];
+
+  for (let index = 0; index < rawLines.length; index += 1) {
+    const rawLine = rawLines[index];
+    const base = rawLine && typeof rawLine === 'object' ? { ...rawLine } : {};
+
+    const cantidadValue = base.cantidad ?? base.quantity ?? base.qty ?? base.cant ?? null;
+    const cantidad = toNumber(cantidadValue, Number.NaN);
+
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      return res
+        .status(400)
+        .json({ message: `La cantidad de la línea ${index + 1} debe ser mayor a cero.` });
+    }
+
+    const articuloIdentifierRaw =
+      base.id_articulo ??
+      base.articulo_id ??
+      base.articuloId ??
+      base.producto_id ??
+      base.productoId ??
+      null;
+    const articuloId = coerceToNumericId(articuloIdentifierRaw);
+
+    const lineType = normalizePurchaseOrderLineType(
+      base.tipo,
+      articuloId !== null && articuloId !== undefined
+    );
+
+    if (lineType === 'Producto' && (articuloId === null || articuloId === undefined)) {
+      return res.status(400).json({
+        message: `La línea ${index + 1} es de tipo Producto y requiere un artículo asociado.`,
+      });
+    }
+
+    const descripcion =
+      typeof base.descripcion === 'string' && base.descripcion.trim()
+        ? base.descripcion.trim()
+        : null;
+
+    const costoUnitario = toNumber(
+      base.costo_unitario ??
+        base.precio_unitario ??
+        base.precioUnitario ??
+        base.costoUnitario ??
+        base.unit_price ??
+        base.unitPrice ??
+        0,
+      0
+    );
+    const totalImpuestos = toNumber(
+      base.total_impuestos ??
+        base.totalImpuestos ??
+        base.impuestos ??
+        base.tax ??
+        base.taxes ??
+        0,
+      0
+    );
+    const totalLinea = toNumber(
+      base.total_linea ?? base.totalLinea ?? base.total ?? costoUnitario * cantidad + totalImpuestos,
+      0
+    );
+
+    const normalizedLine = {
+      tipo: lineType,
+      descripcion,
+      cantidad: roundTo(cantidad, 4),
+      costo_unitario: roundTo(costoUnitario, 4),
+      total_impuestos: roundTo(totalImpuestos, 4),
+      total_linea: roundTo(totalLinea, 4),
+    };
+
+    if (articuloId !== null && articuloId !== undefined && lineType === 'Producto') {
+      normalizedLine.id_articulo = articuloId;
+    }
+
+    normalizedLines.push(normalizedLine);
+  }
+
+  const subtotalFallback = normalizedLines.reduce(
+    (acc, line) => acc + (line.total_linea - line.total_impuestos),
+    0
+  );
+  const taxesFallback = normalizedLines.reduce((acc, line) => acc + line.total_impuestos, 0);
+  const totalFallback = normalizedLines.reduce((acc, line) => acc + line.total_linea, 0);
+
+  const subtotal = roundCurrency(
+    payload.sub_total ?? payload.subtotal ?? payload.subTotal ?? subtotalFallback
+  );
+  const taxes = roundCurrency(
+    payload.total_impuestos ?? payload.totalImpuestos ?? payload.impuestos ?? taxesFallback
+  );
+  const total = roundCurrency(
+    payload.total ??
+      payload.monto_total ??
+      payload.totalOrden ??
+      (Number.isFinite(totalFallback) ? totalFallback : subtotal + taxes)
+  );
+
+  const actorId = extractActorId(req, payload);
+  const actorName = extractActorName(req, payload);
+  const timestamp = new Date().toISOString();
+
+  const headerPayload = {
+    id_proveedor: supplierId,
+    estado:
+      typeof payload.estado === 'string' && payload.estado.trim()
+        ? payload.estado.trim()
+        : 'Pendiente',
+    sub_total: subtotal,
+    total_impuestos: taxes,
+    total,
+    creado_en: timestamp,
+    modificado_en: timestamp,
+  };
+
+  const fechaOrden =
+    typeof payload.fecha_orden === 'string' && payload.fecha_orden.trim()
+      ? payload.fecha_orden.trim()
+      : null;
+
+  if (fechaOrden) {
+    headerPayload.fecha_orden = fechaOrden;
+  }
+
+  const fechaEntrega =
+    typeof payload.fecha_entrega_estimada === 'string' && payload.fecha_entrega_estimada.trim()
+      ? payload.fecha_entrega_estimada.trim()
+      : null;
+
+  if (fechaEntrega) {
+    headerPayload.fecha_entrega_estimada = fechaEntrega;
+  }
+
+  const condicionesPago =
+    typeof payload.condiciones_pago === 'string' && payload.condiciones_pago.trim()
+      ? payload.condiciones_pago.trim()
+      : null;
+
+  if (condicionesPago) {
+    headerPayload.condiciones_pago = condicionesPago;
+  }
+
+  const metodoEnvio =
+    typeof payload.metodo_envio === 'string' && payload.metodo_envio.trim()
+      ? payload.metodo_envio.trim()
+      : null;
+
+  if (metodoEnvio) {
+    headerPayload.metodo_envio = metodoEnvio;
+  }
+
+  const lugarEntrega =
+    typeof payload.lugar_entrega === 'string' && payload.lugar_entrega.trim()
+      ? payload.lugar_entrega.trim()
+      : null;
+
+  if (lugarEntrega) {
+    headerPayload.lugar_entrega = lugarEntrega;
+  }
+
+  const notas = typeof payload.notas === 'string' && payload.notas.trim() ? payload.notas.trim() : null;
+
+  if (notas) {
+    headerPayload.notas = notas;
+  }
+
+  applyActorAuditFields(headerPayload, actorId);
+
+  if (actorName) {
+    headerPayload.creado_por_nombre = headerPayload.creado_por_nombre ?? actorName;
+    headerPayload.modificado_por_nombre = headerPayload.modificado_por_nombre ?? actorName;
+  }
+
+  const cleanedHeaderPayload = Object.fromEntries(
+    Object.entries(headerPayload).filter(([, value]) => value !== undefined)
+  );
+
+  try {
+    const { data: ordenData, error: ordenError } = await supabaseClient
+      .from(ORDENES_COMPRA_TABLE)
+      .insert([cleanedHeaderPayload])
+      .select()
+      .maybeSingle();
+
+    if (ordenError) {
+      console.error('Purchase order creation: header insertion failed.', ordenError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Unexpected error while creating purchase order header.',
+            ordenError
+          )
+        );
+    }
+
+    let ordenId =
+      ordenData?.id ??
+      ordenData?.orden_id ??
+      cleanedHeaderPayload?.id ??
+      cleanedHeaderPayload?.orden_id ??
+      null;
+
+    if (!ordenId) {
+      const { data: recoveredOrder, error: recoveryError } = await supabaseClient
+        .from(ORDENES_COMPRA_TABLE)
+        .select('*')
+        .order('creado_en', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recoveryError) {
+        console.error('Purchase order creation: unable to recover header after insert.', recoveryError);
+        return res
+          .status(500)
+          .json({ message: 'No fue posible determinar el identificador de la orden de compra.' });
+      }
+
+      ordenId = recoveredOrder?.id ?? recoveredOrder?.orden_id ?? null;
+
+      if (!ordenId) {
+        return res
+          .status(500)
+          .json({ message: 'No fue posible determinar el identificador de la orden de compra.' });
+      }
+    }
+
+    const detailPayloads = normalizedLines.map((line) => ({
+      ...line,
+      id_orden: ordenId,
+      creado_en: timestamp,
+    }));
+
+    let lineasData = [];
+
+    if (detailPayloads.length) {
+      const { data: insertedLines, error: lineasError } = await supabaseClient
+        .from(LINEAS_ORDEN_COMPRA_TABLE)
+        .insert(detailPayloads)
+        .select();
+
+      if (lineasError) {
+        console.error('Purchase order creation: detail insertion failed, triggering rollback.', lineasError);
+
+        try {
+          await supabaseClient.from(ORDENES_COMPRA_TABLE).delete().eq('id', ordenId);
+        } catch (rollbackError) {
+          console.error('Purchase order creation: error while rolling back header.', rollbackError);
+        }
+
+        return res
+          .status(500)
+          .json(
+            formatUnexpectedErrorResponse(
+              'Unexpected error while creating purchase order details.',
+              lineasError
+            )
+          );
+      }
+
+      lineasData = Array.isArray(insertedLines) ? insertedLines : [];
+    }
+
+    let ordenRecord = ordenData ?? null;
+
+    if (!ordenRecord) {
+      const { data: refetchedOrder, error: refetchOrderError } = await supabaseClient
+        .from(ORDENES_COMPRA_TABLE)
+        .select('*')
+        .eq('id', ordenId)
+        .maybeSingle();
+
+      if (!refetchOrderError && refetchedOrder) {
+        ordenRecord = refetchedOrder;
+      } else if (refetchOrderError && refetchOrderError.code !== 'PGRST116') {
+        console.error('Purchase order creation: unable to refetch order after insert.', refetchOrderError);
+      }
+    }
+
+    if (ordenRecord && ordenRecord.id === undefined) {
+      ordenRecord.id = ordenId;
+    }
+
+    if (!lineasData.length && detailPayloads.length) {
+      const { data: refetchedLines, error: refetchLinesError } = await supabaseClient
+        .from(LINEAS_ORDEN_COMPRA_TABLE)
+        .select('*')
+        .eq('id_orden', ordenId);
+
+      if (!refetchLinesError && Array.isArray(refetchedLines)) {
+        lineasData = refetchedLines;
+      } else if (refetchLinesError && refetchLinesError.code !== 'PGRST116') {
+        console.error('Purchase order creation: unable to refetch lines after insert.', refetchLinesError);
+      }
+    }
+
+    let proveedor = null;
+
+    try {
+      const { data: supplierData, error: supplierError } = await supabaseClient
+        .from(TERCEROS_TABLE)
+        .select('*')
+        .eq('id', supplierId)
+        .maybeSingle();
+
+      if (supplierError) {
+        console.error('Purchase order creation: supplier lookup error.', supplierError);
+      } else {
+        proveedor = supplierData ?? null;
+      }
+    } catch (supplierLookupError) {
+      console.error('Purchase order creation: unhandled supplier lookup error.', supplierLookupError);
+    }
+
+    return res.status(201).json({
+      message: 'Orden de compra registrada correctamente.',
+      orden: ordenRecord ?? { ...cleanedHeaderPayload, id: ordenId },
+      lineas: lineasData,
+      totales: {
+        subtotal,
+        taxes,
+        total,
+      },
+      proveedor,
+    });
+  } catch (err) {
+    console.error('Unhandled purchase order creation error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while creating purchase order.', err));
+  }
+});
+
 app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
 app.use('/api/facturas', facturasRouter);
+app.use('/api/ordenes-compra', ordenesCompraRouter);
 
 app.post('/api/login', async (req, res) => {
   if (!supabaseClient) {
