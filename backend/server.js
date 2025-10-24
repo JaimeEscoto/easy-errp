@@ -1994,10 +1994,6 @@ facturasRouter.post('/emitir', async (req, res) => {
 
           applyActorAuditFields(revertPayload, actorId, { includeCreated: false });
 
-          if (actorName) {
-            revertPayload.modificado_por_nombre = actorName;
-          }
-
           await supabaseClient
             .from(ARTICULOS_TABLE)
             .update(revertPayload)
@@ -2026,10 +2022,6 @@ facturasRouter.post('/emitir', async (req, res) => {
       };
 
       applyActorAuditFields(updatePayload, actorId, { includeCreated: false });
-
-      if (actorName) {
-        updatePayload.modificado_por_nombre = actorName;
-      }
 
       const identifierValue = article.id;
 
