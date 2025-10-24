@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Easy ERP · Facturas de Venta</title>
+    <title>Easy ERP · Órdenes de Compra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="theme.css" />
   </head>
@@ -108,7 +108,7 @@
             </button>
             <ul class="mt-1 space-y-1 pl-9 text-sm text-gray-300">
               <li>
-                <a class="block rounded-lg px-2 py-1 bg-blue-600 text-white" href="transacciones-ventas.html">
+                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ventas.html">
                   Facturas de Venta
                 </a>
               </li>
@@ -118,15 +118,12 @@
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ordenes-compra.html">
+                <a class="block rounded-lg px-2 py-1 bg-blue-600 text-white" href="transacciones-ordenes-compra.html">
                   Órdenes de Compra
                 </a>
               </li>
               <li>
-                <a
-                  class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white"
-                  href="transacciones-facturas-emitidas.html"
-                >
+                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-facturas-emitidas.html">
                   Facturas Emitidas
                 </a>
               </li>
@@ -154,34 +151,27 @@
         <div class="space-y-6">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 class="text-2xl font-semibold text-gray-900">Transacciones · Facturas de Venta</h1>
+              <h1 class="text-2xl font-semibold text-gray-900">Transacciones · Órdenes de Compra</h1>
               <p class="mt-2 text-sm text-gray-500">
-                Emite facturas de venta registrando al cliente, los artículos vendidos y los importes correspondientes.
+                Registra órdenes de compra detallando al proveedor, fechas de entrega y los artículos solicitados.
               </p>
             </div>
             <div class="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                id="refresh-invoice-catalogs"
+                id="refresh-purchase-catalogs"
                 class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M16.023 9.348h4.992V4.356M2.985 15.366v4.992h4.992"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M4.726 19.611A9.004 9.004 0 0021 13.5M3 10.5a9.004 9.004 0 0116.274-6.098"
-                  />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.985 15.366v4.992h4.992" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.726 19.611A9.004 9.004 0 0021 13.5M3 10.5a9.004 9.004 0 0116.274-6.098" />
                 </svg>
                 Actualizar catálogos
               </button>
               <button
                 type="button"
-                id="invoice-clear-button"
+                id="purchase-clear-button"
                 class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -193,84 +183,115 @@
           </div>
 
           <div
-            id="invoice-loading"
+            id="purchase-loading"
             class="hidden items-center justify-center gap-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/70 px-4 py-4 text-sm font-medium text-blue-800"
           >
             <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 00-10 10h4z"></path>
             </svg>
-            Cargando catálogos de clientes y artículos…
+            Cargando catálogos de proveedores y artículos…
           </div>
 
           <div
-            id="invoice-feedback"
+            id="purchase-feedback"
             class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             role="alert"
           ></div>
 
           <div
-            id="invoice-success"
+            id="purchase-success"
             class="hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
             role="status"
           ></div>
 
-          <form id="invoice-form" class="space-y-6">
+          <form id="purchase-order-form" class="space-y-6">
             <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <div class="flex flex-col gap-6 lg:flex-row">
                 <div class="flex-1 space-y-4">
                   <div class="flex flex-col gap-1">
-                    <label for="invoice-client" class="text-sm font-medium text-gray-700">Cliente *</label>
+                    <label for="purchase-supplier" class="text-sm font-medium text-gray-700">Proveedor *</label>
                     <select
-                      id="invoice-client"
-                      name="cliente"
+                      id="purchase-supplier"
+                      name="proveedor"
                       required
                       class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">Selecciona un cliente activo…</option>
+                      <option value="">Selecciona un proveedor activo…</option>
                     </select>
                     <p class="text-xs text-gray-500">
-                      Solo se muestran terceros marcados como clientes y activos en el catálogo.
+                      Solo se muestran terceros marcados como proveedores y activos en el catálogo.
                     </p>
                   </div>
                   <div class="grid gap-4 sm:grid-cols-2">
                     <div class="flex flex-col gap-1">
-                      <label for="invoice-date" class="text-sm font-medium text-gray-700">Fecha de emisión *</label>
+                      <label for="purchase-order-date" class="text-sm font-medium text-gray-700">Fecha de orden *</label>
                       <input
-                        id="invoice-date"
-                        name="fecha"
+                        id="purchase-order-date"
+                        name="fecha_orden"
                         type="date"
                         required
                         class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                     <div class="flex flex-col gap-1">
-                      <label for="invoice-payment-terms" class="text-sm font-medium text-gray-700">Condiciones de pago</label>
+                      <label for="purchase-delivery-date" class="text-sm font-medium text-gray-700">Fecha estimada de entrega</label>
                       <input
-                        id="invoice-payment-terms"
+                        id="purchase-delivery-date"
+                        name="fecha_entrega"
+                        type="date"
+                        class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="flex flex-col gap-1">
+                      <label for="purchase-payment-terms" class="text-sm font-medium text-gray-700">Condiciones de pago</label>
+                      <input
+                        id="purchase-payment-terms"
                         name="condiciones_pago"
                         type="text"
                         class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Contado, 15 días, crédito…"
+                        placeholder="30 días, contado, crédito…"
+                      />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                      <label for="purchase-shipping-method" class="text-sm font-medium text-gray-700">Método de envío</label>
+                      <input
+                        id="purchase-shipping-method"
+                        name="metodo_envio"
+                        type="text"
+                        class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Courier, transporte propio, etc."
                       />
                     </div>
                   </div>
                 </div>
                 <div class="flex-1 space-y-4">
                   <div class="flex flex-col gap-1">
-                    <label for="invoice-notes" class="text-sm font-medium text-gray-700">Notas internas</label>
-                    <textarea
-                      id="invoice-notes"
-                      name="notas"
-                      rows="4"
+                    <label for="purchase-delivery-location" class="text-sm font-medium text-gray-700">Lugar de entrega</label>
+                    <input
+                      id="purchase-delivery-location"
+                      name="lugar_entrega"
+                      type="text"
                       class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Observaciones visibles para el equipo contable"
+                      placeholder="Bodega principal, sucursal, etc."
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label for="purchase-notes" class="text-sm font-medium text-gray-700">Notas internas</label>
+                    <textarea
+                      id="purchase-notes"
+                      name="notas"
+                      rows="5"
+                      class="rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Observaciones adicionales para el equipo de compras"
                     ></textarea>
                   </div>
-                  <div class="rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-800">
+                  <div class="rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-800">
                     <p class="font-medium">Consejo</p>
-                    <p class="mt-1 text-blue-700">
-                      Registra las notas con instrucciones especiales sobre entrega, descuentos o condiciones pactadas con el cliente.
+                    <p class="mt-1 text-amber-700">
+                      Especifica lugares y fechas para coordinar entregas y evitar retrasos en la cadena de suministro.
                     </p>
                   </div>
                 </div>
@@ -280,12 +301,12 @@
             <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 class="text-lg font-semibold text-gray-900">Líneas de la factura</h2>
-                  <p class="text-sm text-gray-500">Agrega artículos o servicios para calcular totales automáticamente.</p>
+                  <h2 class="text-lg font-semibold text-gray-900">Líneas de la orden</h2>
+                  <p class="text-sm text-gray-500">Detalla los artículos solicitados para calcular totales automáticamente.</p>
                 </div>
                 <button
                   type="button"
-                  id="add-invoice-line"
+                  id="add-purchase-line"
                   class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -303,19 +324,19 @@
                       <th scope="col" class="px-4 py-3">Descripción</th>
                       <th scope="col" class="px-4 py-3">Tipo</th>
                       <th scope="col" class="px-4 py-3">Cantidad</th>
-                      <th scope="col" class="px-4 py-3">Precio unitario</th>
+                      <th scope="col" class="px-4 py-3">Costo unitario</th>
                       <th scope="col" class="px-4 py-3">Impuestos</th>
                       <th scope="col" class="px-4 py-3">Total línea</th>
                       <th scope="col" class="px-4 py-3 text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody id="invoice-lines-body" class="divide-y divide-gray-200 bg-white"></tbody>
+                  <tbody id="purchase-lines-body" class="divide-y divide-gray-200 bg-white"></tbody>
                 </table>
                 <div
-                  id="invoice-lines-empty"
+                  id="purchase-lines-empty"
                   class="hidden bg-white px-6 py-8 text-center text-sm text-gray-500"
                 >
-                  Añade al menos una línea para calcular los importes de la factura.
+                  Añade al menos una línea para calcular los importes de la orden.
                 </div>
               </div>
             </section>
@@ -325,30 +346,30 @@
                 <dl class="space-y-3 text-sm text-gray-700">
                   <div class="flex items-center justify-between">
                     <dt class="font-medium">Subtotal</dt>
-                    <dd id="invoice-subtotal" class="font-semibold text-gray-900">$0.00</dd>
+                    <dd id="purchase-subtotal" class="font-semibold text-gray-900">$0.00</dd>
                   </div>
                   <div class="flex items-center justify-between">
                     <dt class="font-medium">Impuestos</dt>
-                    <dd id="invoice-taxes" class="font-semibold text-gray-900">$0.00</dd>
+                    <dd id="purchase-taxes" class="font-semibold text-gray-900">$0.00</dd>
                   </div>
                   <div class="flex items-center justify-between border-t border-gray-200 pt-3 text-base">
-                    <dt class="font-semibold text-gray-900">Total a facturar</dt>
-                    <dd id="invoice-total" class="font-semibold text-gray-900">$0.00</dd>
+                    <dt class="font-semibold text-gray-900">Total de la orden</dt>
+                    <dd id="purchase-total" class="font-semibold text-gray-900">$0.00</dd>
                   </div>
                 </dl>
                 <div class="flex flex-col gap-3 lg:justify-self-end">
                   <button
                     type="submit"
-                    id="invoice-submit-button"
+                    id="purchase-submit-button"
                     class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                   >
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                    Emitir factura
+                    Registrar orden
                   </button>
                   <p class="text-xs text-gray-500">
-                    Los totales se recalculan en tiempo real conforme actualizas cada línea de la factura.
+                    Los totales se recalculan en tiempo real conforme actualizas cada línea de la orden.
                   </p>
                 </div>
               </div>
@@ -356,7 +377,7 @@
           </form>
 
           <div
-            id="invoice-result-card"
+            id="purchase-result-card"
             class="hidden rounded-2xl border border-blue-200 bg-blue-50 px-6 py-5 text-sm text-blue-800 shadow-sm"
           ></div>
         </div>
@@ -390,6 +411,6 @@
     <script src="env.js"></script>
     <script src="config.js"></script>
     <script type="module" src="scripts/protected-page.js"></script>
-    <script type="module" src="scripts/transacciones-ventas.js"></script>
+    <script type="module" src="scripts/ordenes-compra.js"></script>
   </body>
 </html>
