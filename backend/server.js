@@ -729,6 +729,27 @@ const getThirdPartyDisplayName = (thirdParty = {}) => {
   return 'Cliente sin nombre';
 };
 
+const buildThirdPartyLookupKey = (thirdParty = {}) => {
+  const candidates = [
+    thirdParty.id,
+    thirdParty.tercero_id,
+    thirdParty.terceroId,
+    thirdParty.identificacion_fiscal,
+    thirdParty.identificacion,
+    thirdParty.nit,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeIdentifier(candidate);
+
+    if (normalized !== null && normalized !== undefined) {
+      return String(normalized);
+    }
+  }
+
+  return null;
+};
+
 const getArticleDisplayName = (article = {}) => {
   const candidates = [article.nombre, article.descripcion_corta, article.descripcion, article.codigo];
 
@@ -1543,6 +1564,131 @@ const extractInvoiceLines = (payload = {}) => {
 
   return [];
 };
+
+facturasRouter.get('/', async (_req, res) => {
+  try {
+    const { data: facturasData, error: facturasError } = await supabaseClient
+      .from(FACTURAS_VENTA_TABLE)
+      .select('*')
+      .order('fecha', { ascending: false })
+      .order('creado_en', { ascending: false });
+
+    if (facturasError) {
+      console.error('Invoice list error:', facturasError);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching invoices.', facturasError));
+    }
+
+    const facturas = Array.isArray(facturasData) ? facturasData : [];
+
+    const invoiceEntries = facturas.map((factura) => {
+      const rawClientIdentifier = extractInvoiceClientIdentifier(factura);
+      const normalizedClientIdentifier = normalizeIdentifier(rawClientIdentifier);
+      const clientKey =
+        normalizedClientIdentifier !== null && normalizedClientIdentifier !== undefined
+          ? String(normalizedClientIdentifier)
+          : null;
+
+      return {
+        factura,
+        clientKey,
+        normalizedClientIdentifier,
+      };
+    });
+
+    const numericClientIds = new Set();
+    const stringClientIds = new Set();
+
+    for (const entry of invoiceEntries) {
+      if (entry.normalizedClientIdentifier === null || entry.normalizedClientIdentifier === undefined) {
+        continue;
+      }
+
+      if (typeof entry.normalizedClientIdentifier === 'number') {
+        numericClientIds.add(entry.normalizedClientIdentifier);
+      } else if (typeof entry.normalizedClientIdentifier === 'string') {
+        stringClientIds.add(entry.normalizedClientIdentifier);
+      }
+    }
+
+    const clientLookup = new Map();
+
+    const addClientsToLookup = (records = []) => {
+      for (const record of records ?? []) {
+        const key = buildThirdPartyLookupKey(record);
+
+        if (key) {
+          clientLookup.set(key, record);
+        }
+      }
+    };
+
+    const fetchClientsByColumn = async (column, values) => {
+      if (!values.length) {
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from(TERCEROS_TABLE)
+        .select('*')
+        .in(column, values);
+
+      if (error) {
+        if (error.code === '42703') {
+          console.warn(`Invoice list warning: column ${column} is not available on terceros table.`);
+          return;
+        }
+
+        throw error;
+      }
+
+      addClientsToLookup(data);
+    };
+
+    try {
+      const numericValues = Array.from(numericClientIds);
+      const stringValues = Array.from(stringClientIds);
+
+      if (numericValues.length) {
+        await fetchClientsByColumn('id', numericValues);
+        await fetchClientsByColumn('tercero_id', numericValues);
+      }
+
+      if (stringValues.length) {
+        await fetchClientsByColumn('id', stringValues);
+        await fetchClientsByColumn('tercero_id', stringValues);
+        await fetchClientsByColumn('identificacion_fiscal', stringValues);
+      }
+    } catch (clientError) {
+      console.error('Invoice list client lookup error:', clientError);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching invoice customers.', clientError));
+    }
+
+    const enrichedFacturas = invoiceEntries.map((entry) => {
+      if (entry.clientKey && clientLookup.has(entry.clientKey)) {
+        return {
+          ...entry.factura,
+          cliente: clientLookup.get(entry.clientKey),
+        };
+      }
+
+      return entry.factura;
+    });
+
+    return res.json({
+      facturas: enrichedFacturas,
+      total: enrichedFacturas.length,
+    });
+  } catch (err) {
+    console.error('Unhandled invoice list error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching invoices.', err));
+  }
+});
 
 facturasRouter.post('/emitir', async (req, res) => {
   const payload = req.body ?? {};
