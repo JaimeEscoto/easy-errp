@@ -34,6 +34,11 @@ const PAGOS_RECIBIDOS_TABLE = 'pagos_recibidos';
 const LINEAS_FACTURA_TABLE = 'lineas_factura';
 const ORDENES_COMPRA_TABLE = 'ordenes_compra';
 const LINEAS_ORDEN_COMPRA_TABLE = 'lineas_orden_compra';
+const ALMACENES_TABLE = 'almacenes';
+const INVENTARIO_ARTICULOS_TABLE = 'inventario_articulos';
+const ENTRADAS_ALMACEN_TABLE = 'entradas_almacen';
+const LINEAS_ENTRADA_ALMACEN_TABLE = 'lineas_entrada_almacen';
+const PAGOS_PROVEEDORES_TABLE = 'pagos_proveedores';
 const TERCEROS_TABLE = 'terceros';
 const TERCEROS_LOG_TABLE_CANDIDATES = [
   'terceros_log',
@@ -826,6 +831,11 @@ const toNumber = (value, fallback = 0) => {
 const roundCurrency = (value) => {
   const normalized = toNumber(value, 0);
   return Math.round((normalized + Number.EPSILON) * 100) / 100;
+};
+
+const roundQuantity = (value) => {
+  const normalized = toNumber(value, 0);
+  return Math.round((normalized + Number.EPSILON) * 10000) / 10000;
 };
 
 const parseDateToIso = (value) => {
@@ -2818,6 +2828,799 @@ facturasRouter.post('/emitir', async (req, res) => {
   }
 });
 
+const almacenesRouter = express.Router();
+
+almacenesRouter.use(ensureSupabaseConfigured);
+
+almacenesRouter.get('/', async (_req, res) => {
+  try {
+    const { data, error } = await supabaseClient
+      .from(ALMACENES_TABLE)
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (error) {
+      if (error.code === '42P01') {
+        console.warn('Warehouse list warning: almacenes table is not available yet.');
+        return res.json({ almacenes: [], total: 0, fetched_at: new Date().toISOString() });
+      }
+
+      console.error('Warehouse list error:', error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching warehouses.', error));
+    }
+
+    const almacenes = Array.isArray(data) ? data : [];
+
+    return res.json({ almacenes, total: almacenes.length, fetched_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('Unhandled warehouse list error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching warehouses.', err));
+  }
+});
+
+almacenesRouter.post('/', async (req, res) => {
+  try {
+    const payload = req.body ?? {};
+
+    const nombre = typeof payload.nombre === 'string' ? payload.nombre.trim() : '';
+
+    if (!nombre) {
+      return res.status(400).json({ message: 'El nombre del almacén es obligatorio.' });
+    }
+
+    const actorId = extractActorId(req, payload);
+    const actorName = extractActorName(req, payload);
+    const timestamp = new Date().toISOString();
+
+    const booleanCandidate =
+      payload.activo ?? payload.active ?? payload.estado ?? payload.status ?? true;
+    const activoNormalized = normalizeBoolean(booleanCandidate);
+
+    const recordPayload = {
+      codigo: typeof payload.codigo === 'string' && payload.codigo.trim() ? payload.codigo.trim() : null,
+      nombre,
+      ubicacion:
+        typeof payload.ubicacion === 'string' && payload.ubicacion.trim()
+          ? payload.ubicacion.trim()
+          : null,
+      descripcion:
+        typeof payload.descripcion === 'string' && payload.descripcion.trim()
+          ? payload.descripcion.trim()
+          : null,
+      notas: typeof payload.notas === 'string' && payload.notas.trim() ? payload.notas.trim() : null,
+      activo: activoNormalized === null ? true : activoNormalized,
+      creado_en: timestamp,
+      actualizado_en: timestamp,
+    };
+
+    applyActorAuditFields(recordPayload, actorId);
+
+    if (actorName) {
+      if (!recordPayload.creado_por_nombre) {
+        recordPayload.creado_por_nombre = actorName;
+      }
+
+      recordPayload.modificado_por_nombre = actorName;
+    }
+
+    const cleanedPayload = Object.fromEntries(
+      Object.entries(recordPayload).filter(([, value]) => value !== undefined)
+    );
+
+    const { data, error } = await supabaseClient
+      .from(ALMACENES_TABLE)
+      .insert([cleanedPayload])
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Warehouse creation error:', error);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating warehouse.', error));
+    }
+
+    return res.status(201).json(data ?? cleanedPayload);
+  } catch (err) {
+    console.error('Unhandled warehouse creation error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while creating warehouse.', err));
+  }
+});
+
+const getRecordIdentifierKey = (value) => {
+  const normalized = normalizeIdentifier(value);
+
+  if (normalized === null || normalized === undefined) {
+    return null;
+  }
+
+  return String(normalized);
+};
+
+const fetchPurchaseOrderDetail = async (orderId) => {
+  const normalizedId = normalizeIdentifier(orderId);
+
+  if (normalizedId === null || normalizedId === undefined) {
+    return {
+      order: null,
+      lines: [],
+      entries: [],
+      entryLines: [],
+      payments: [],
+    };
+  }
+
+  const detail = {
+    order: null,
+    lines: [],
+    entries: [],
+    entryLines: [],
+    payments: [],
+  };
+
+  const { data: orderData, error: orderError } = await supabaseClient
+    .from(ORDENES_COMPRA_TABLE)
+    .select('*')
+    .eq('id', normalizedId)
+    .maybeSingle();
+
+  if (orderError) {
+    throw orderError;
+  }
+
+  if (!orderData) {
+    return detail;
+  }
+
+  detail.order = orderData;
+
+  const { data: linesData, error: linesError } = await supabaseClient
+    .from(LINEAS_ORDEN_COMPRA_TABLE)
+    .select('*')
+    .eq('id_orden', normalizedId);
+
+  if (linesError) {
+    if (linesError.code !== '42P01') {
+      throw linesError;
+    }
+  } else if (Array.isArray(linesData)) {
+    detail.lines = linesData;
+  }
+
+  const { data: entriesData, error: entriesError } = await supabaseClient
+    .from(ENTRADAS_ALMACEN_TABLE)
+    .select('*')
+    .eq('orden_compra_id', normalizedId);
+
+  if (entriesError) {
+    if (entriesError.code !== '42P01') {
+      throw entriesError;
+    }
+  } else if (Array.isArray(entriesData)) {
+    detail.entries = entriesData;
+  }
+
+  const entryIds = (detail.entries ?? [])
+    .map((entry) => normalizeIdentifier(entry?.id))
+    .filter((identifier) => identifier !== null && identifier !== undefined);
+
+  if (entryIds.length) {
+    const { data: entryLinesData, error: entryLinesError } = await supabaseClient
+      .from(LINEAS_ENTRADA_ALMACEN_TABLE)
+      .select('*')
+      .in('entrada_id', entryIds);
+
+    if (entryLinesError) {
+      if (entryLinesError.code !== '42P01') {
+        throw entryLinesError;
+      }
+    } else if (Array.isArray(entryLinesData)) {
+      detail.entryLines = entryLinesData;
+    }
+  }
+
+  const { data: paymentsData, error: paymentsError } = await supabaseClient
+    .from(PAGOS_PROVEEDORES_TABLE)
+    .select('*')
+    .eq('orden_compra_id', normalizedId);
+
+  if (paymentsError) {
+    if (paymentsError.code !== '42P01') {
+      throw paymentsError;
+    }
+  } else if (Array.isArray(paymentsData)) {
+    detail.payments = paymentsData;
+  }
+
+  return detail;
+};
+
+const buildPurchaseOrderComputedDetail = (detail) => {
+  const orderRecord = detail?.order ?? null;
+  const orderLines = Array.isArray(detail?.lines) ? detail.lines : [];
+  const entryLines = Array.isArray(detail?.entryLines) ? detail.entryLines : [];
+  const payments = Array.isArray(detail?.payments) ? detail.payments : [];
+
+  const receivedByArticle = new Map();
+
+  for (const entryLine of entryLines) {
+    const articleKey = getRecordIdentifierKey(
+      entryLine?.articulo_id ??
+        entryLine?.id_articulo ??
+        entryLine?.articuloId ??
+        entryLine?.idArticulo ??
+        entryLine?.linea_articulo_id
+    );
+
+    if (!articleKey) {
+      continue;
+    }
+
+    const quantity = roundQuantity(
+      entryLine?.cantidad ??
+        entryLine?.cantidad_recibida ??
+        entryLine?.quantity ??
+        entryLine?.qty ??
+        entryLine?.cantidadRecibida ??
+        0
+    );
+
+    if (!(quantity > 0)) {
+      continue;
+    }
+
+    const previous = receivedByArticle.get(articleKey) ?? 0;
+    receivedByArticle.set(articleKey, roundQuantity(previous + quantity));
+  }
+
+  let totalOrdered = 0;
+  let totalReceived = 0;
+
+  const enrichedLines = orderLines.map((line) => {
+    const articleKey = getRecordIdentifierKey(
+      line?.articulo_id ?? line?.id_articulo ?? line?.articuloId ?? line?.idArticulo
+    );
+
+    const orderedQuantity = roundQuantity(
+      line?.cantidad ??
+        line?.cantidad_solicitada ??
+        line?.cantidad_ordenada ??
+        line?.quantity ??
+        line?.qty ??
+        0
+    );
+
+    const receivedQuantity = articleKey ? receivedByArticle.get(articleKey) ?? 0 : 0;
+    const limitedReceived = Math.min(receivedQuantity, orderedQuantity);
+    const pendingQuantity = Math.max(0, roundQuantity(orderedQuantity - limitedReceived));
+
+    totalOrdered = roundQuantity(totalOrdered + orderedQuantity);
+    totalReceived = roundQuantity(totalReceived + limitedReceived);
+
+    return {
+      ...line,
+      articulo_key: articleKey,
+      cantidad_ordenada: orderedQuantity,
+      cantidad_recibida: roundQuantity(limitedReceived),
+      cantidad_pendiente: roundQuantity(pendingQuantity),
+    };
+  });
+
+  const totalPagado = payments.reduce((acc, payment) => {
+    const amount = roundCurrency(
+      payment?.monto_pagado ??
+        payment?.monto ??
+        payment?.amount ??
+        payment?.montoPago ??
+        0
+    );
+
+    return roundCurrency(acc + amount);
+  }, 0);
+
+  const orderTotal = roundCurrency(
+    orderRecord?.total ??
+      orderRecord?.monto_total ??
+      orderRecord?.gran_total ??
+      orderRecord?.total_orden ??
+      orderRecord?.importe_total ??
+      0
+  );
+
+  const saldoPendiente = roundCurrency(orderTotal - totalPagado);
+
+  const recepcionCompleta =
+    enrichedLines.length > 0 &&
+    enrichedLines.every((line) => line.cantidad_pendiente <= 0.0001);
+
+  return {
+    order: orderRecord,
+    lines: enrichedLines,
+    entries: detail?.entries ?? [],
+    entryLines,
+    payments,
+    resumen: {
+      total_ordenado: roundQuantity(totalOrdered),
+      total_recibido: roundQuantity(totalReceived),
+      total_pendiente: roundQuantity(Math.max(0, totalOrdered - totalReceived)),
+      recepcion_completa: recepcionCompleta,
+    },
+    pagos: {
+      total_pagado: roundCurrency(totalPagado),
+      saldo_pendiente: roundCurrency(Math.max(0, saldoPendiente)),
+    },
+  };
+};
+
+const entradasAlmacenRouter = express.Router();
+
+entradasAlmacenRouter.use(ensureSupabaseConfigured);
+
+entradasAlmacenRouter.get('/', async (_req, res) => {
+  try {
+    const { data: entriesData, error: entriesError } = await supabaseClient
+      .from(ENTRADAS_ALMACEN_TABLE)
+      .select('*')
+      .order('fecha_entrada', { ascending: false })
+      .order('creado_en', { ascending: false });
+
+    if (entriesError) {
+      if (entriesError.code === '42P01') {
+        console.warn('Warehouse entries list warning: entradas_almacen table is not available yet.');
+        return res.json({ entradas: [], total: 0, fetched_at: new Date().toISOString() });
+      }
+
+      console.error('Warehouse entries list error:', entriesError);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while fetching warehouse entries.', entriesError));
+    }
+
+    const entradas = Array.isArray(entriesData) ? entriesData : [];
+    const entradaIds = entradas
+      .map((entry) => normalizeIdentifier(entry?.id))
+      .filter((identifier) => identifier !== null && identifier !== undefined);
+
+    let lineas = [];
+
+    if (entradaIds.length) {
+      const { data: lineasData, error: lineasError } = await supabaseClient
+        .from(LINEAS_ENTRADA_ALMACEN_TABLE)
+        .select('*')
+        .in('entrada_id', entradaIds);
+
+      if (lineasError) {
+        if (lineasError.code !== '42P01') {
+          throw lineasError;
+        }
+      } else if (Array.isArray(lineasData)) {
+        lineas = lineasData;
+      }
+    }
+
+    const linesByEntry = new Map();
+
+    for (const line of lineas) {
+      const entryId = getRecordIdentifierKey(line?.entrada_id);
+
+      if (!entryId) {
+        continue;
+      }
+
+      if (!linesByEntry.has(entryId)) {
+        linesByEntry.set(entryId, []);
+      }
+
+      linesByEntry.get(entryId).push(line);
+    }
+
+    const enrichedEntries = entradas.map((entry) => {
+      const entryId = getRecordIdentifierKey(entry?.id);
+      const relatedLines = entryId ? linesByEntry.get(entryId) ?? [] : [];
+      const totalArticulos = relatedLines.length;
+      const totalCantidad = relatedLines.reduce((acc, line) => {
+        const quantity = roundQuantity(
+          line?.cantidad ?? line?.cantidad_recibida ?? line?.quantity ?? line?.qty ?? 0
+        );
+
+        return roundQuantity(acc + Math.max(0, quantity));
+      }, 0);
+
+      return {
+        ...entry,
+        total_lineas: totalArticulos,
+        total_cantidad: totalCantidad,
+      };
+    });
+
+    return res.json({
+      entradas: enrichedEntries,
+      total: enrichedEntries.length,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Unhandled warehouse entries list error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching warehouse entries.', err));
+  }
+});
+
+entradasAlmacenRouter.post('/', async (req, res) => {
+  const payload = req.body ?? {};
+
+  try {
+    const actorId = extractActorId(req, payload);
+    const actorName = extractActorName(req, payload);
+
+    const orderIdentifierRaw =
+      payload.id_orden ??
+      payload.idOrden ??
+      payload.orden_id ??
+      payload.ordenId ??
+      payload.order_id ??
+      payload.orderId ??
+      null;
+    const warehouseIdentifierRaw =
+      payload.id_almacen ?? payload.almacen_id ?? payload.almacenId ?? payload.warehouse_id ?? null;
+
+    const orderId = normalizeIdentifier(orderIdentifierRaw);
+    const warehouseId = normalizeIdentifier(warehouseIdentifierRaw);
+
+    if (orderId === null || orderId === undefined) {
+      return res.status(400).json({ message: 'La orden de compra es obligatoria.' });
+    }
+
+    if (warehouseId === null || warehouseId === undefined) {
+      return res.status(400).json({ message: 'Selecciona un almacén para registrar la entrada.' });
+    }
+
+    const lineItemsRaw = Array.isArray(payload.lineas) ? payload.lineas : payload.detalles ?? [];
+    const lineItems = Array.isArray(lineItemsRaw)
+      ? lineItemsRaw.filter((item) => item !== null && item !== undefined)
+      : [];
+
+    if (!lineItems.length) {
+      return res.status(400).json({ message: 'La entrada debe incluir al menos una línea.' });
+    }
+
+    const orderDetail = await fetchPurchaseOrderDetail(orderId);
+
+    if (!orderDetail.order) {
+      return res.status(404).json({ message: 'La orden de compra no existe.' });
+    }
+
+    const computedDetail = buildPurchaseOrderComputedDetail(orderDetail);
+    const lineLookup = new Map();
+
+    for (const line of computedDetail.lines ?? []) {
+      if (!line.articulo_key) {
+        continue;
+      }
+
+      lineLookup.set(line.articulo_key, line);
+    }
+
+    const sanitizedLines = [];
+
+    for (let index = 0; index < lineItems.length; index += 1) {
+      const incomingLine = lineItems[index] ?? {};
+      const articleKey = getRecordIdentifierKey(
+        incomingLine?.articulo_id ??
+          incomingLine?.id_articulo ??
+          incomingLine?.articuloId ??
+          incomingLine?.idArticulo
+      );
+
+      if (!articleKey) {
+        return res.status(400).json({ message: `La línea ${index + 1} no tiene artículo asociado.` });
+      }
+
+      if (!lineLookup.has(articleKey)) {
+        return res.status(400).json({
+          message: `El artículo de la línea ${index + 1} no corresponde a la orden de compra seleccionada.`,
+        });
+      }
+
+      const targetLine = lineLookup.get(articleKey);
+      const quantity = roundQuantity(
+        incomingLine?.cantidad ??
+          incomingLine?.cantidad_recibida ??
+          incomingLine?.quantity ??
+          incomingLine?.qty ??
+          incomingLine?.cantidadRecibida ??
+          0
+      );
+
+      if (!(quantity > 0)) {
+        return res.status(400).json({
+          message: `La cantidad de la línea ${index + 1} debe ser mayor a cero.`,
+        });
+      }
+
+      if (quantity > targetLine.cantidad_pendiente + 0.0001) {
+        return res.status(400).json({
+          message: `La cantidad de la línea ${index + 1} excede lo pendiente por recibir.`,
+          cantidadPendiente: targetLine.cantidad_pendiente,
+        });
+      }
+
+      const unitCost = roundCurrency(
+        incomingLine?.costo_unitario ??
+          incomingLine?.precio_unitario ??
+          incomingLine?.precioUnitario ??
+          targetLine?.precio_unitario ??
+          targetLine?.precioUnitario ??
+          0
+      );
+
+      sanitizedLines.push({
+        articulo_key: articleKey,
+        articulo_id: targetLine?.articulo_id ?? targetLine?.id_articulo ?? null,
+        cantidad: quantity,
+        costo_unitario: unitCost,
+        linea_orden_id: targetLine?.id ?? targetLine?.linea_id ?? null,
+        descripcion:
+          typeof incomingLine?.descripcion === 'string' && incomingLine.descripcion.trim()
+            ? incomingLine.descripcion.trim()
+            : targetLine?.descripcion ?? null,
+      });
+    }
+
+    if (!sanitizedLines.length) {
+      return res.status(400).json({ message: 'No hay líneas válidas para registrar.' });
+    }
+
+    const timestamp = new Date().toISOString();
+    const entryPayload = {
+      orden_compra_id: orderId,
+      almacen_id: warehouseId,
+      fecha_entrada: parseDateToIso(payload.fecha_entrada ?? payload.fechaEntrada) ?? timestamp,
+      notas: typeof payload.notas === 'string' && payload.notas.trim() ? payload.notas.trim() : null,
+      registrado_por: formatActorLabel(actorId, actorName),
+      creado_en: timestamp,
+      actualizado_en: timestamp,
+    };
+
+    applyActorAuditFields(entryPayload, actorId);
+
+    if (actorName) {
+      if (!entryPayload.creado_por_nombre) {
+        entryPayload.creado_por_nombre = actorName;
+      }
+
+      entryPayload.modificado_por_nombre = actorName;
+    }
+
+    const cleanedEntryPayload = Object.fromEntries(
+      Object.entries(entryPayload).filter(([, value]) => value !== undefined)
+    );
+
+    const { data: entryData, error: entryError } = await supabaseClient
+      .from(ENTRADAS_ALMACEN_TABLE)
+      .insert([cleanedEntryPayload])
+      .select()
+      .maybeSingle();
+
+    if (entryError) {
+      console.error('Warehouse entry creation error:', entryError);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating warehouse entry.', entryError));
+    }
+
+    const entryId = normalizeIdentifier(entryData?.id) ?? null;
+
+    if (entryId === null || entryId === undefined) {
+      console.error('Warehouse entry creation error: unable to determine entry identifier.', entryData);
+      return res.status(500).json({
+        message: 'No fue posible determinar el identificador de la entrada de almacén.',
+      });
+    }
+
+    const linePayloads = sanitizedLines.map((line) => {
+      const subtotal = roundCurrency(line.cantidad * line.costo_unitario);
+
+      const detailPayload = {
+        entrada_id: entryId,
+        orden_compra_id: orderId,
+        articulo_id: line.articulo_id ?? null,
+        cantidad: line.cantidad,
+        costo_unitario: line.costo_unitario,
+        subtotal,
+        descripcion: line.descripcion,
+        linea_orden_id: line.linea_orden_id,
+        creado_en: timestamp,
+        actualizado_en: timestamp,
+      };
+
+      applyActorAuditFields(detailPayload, actorId);
+
+      if (actorName) {
+        if (!detailPayload.creado_por_nombre) {
+          detailPayload.creado_por_nombre = actorName;
+        }
+
+        detailPayload.modificado_por_nombre = actorName;
+      }
+
+      return Object.fromEntries(Object.entries(detailPayload).filter(([, value]) => value !== undefined));
+    });
+
+    const { data: entryLinesData, error: entryLinesError } = await supabaseClient
+      .from(LINEAS_ENTRADA_ALMACEN_TABLE)
+      .insert(linePayloads)
+      .select();
+
+    if (entryLinesError) {
+      console.error('Warehouse entry lines insertion error:', entryLinesError);
+      await supabaseClient.from(ENTRADAS_ALMACEN_TABLE).delete().eq('id', entryId);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while creating warehouse entry lines.', entryLinesError));
+    }
+
+    const stockAdjustments = [];
+
+    const revertStockAdjustments = async () => {
+      for (const adjustment of stockAdjustments.slice().reverse()) {
+        try {
+          const revertPayload = {
+            articulo_id: adjustment.articuloId,
+            almacen_id: adjustment.almacenId,
+            existencia: adjustment.previousExistence,
+            actualizado_en: timestamp,
+          };
+
+          applyActorAuditFields(revertPayload, actorId, { includeCreated: false });
+
+          if (actorName) {
+            revertPayload.modificado_por_nombre = actorName;
+          }
+
+          await supabaseClient
+            .from(INVENTARIO_ARTICULOS_TABLE)
+            .upsert([revertPayload], { onConflict: 'articulo_id,almacen_id' });
+        } catch (revertError) {
+          console.error('Warehouse entry revert stock error:', revertError);
+        }
+      }
+    };
+
+    try {
+      for (const line of sanitizedLines) {
+        const articuloId = normalizeIdentifier(line.articulo_id) ?? null;
+
+        if (articuloId === null || articuloId === undefined) {
+          continue;
+        }
+
+        let previousExistence = 0;
+        let existingStockId = null;
+
+        const { data: stockRecord, error: stockLookupError } = await supabaseClient
+          .from(INVENTARIO_ARTICULOS_TABLE)
+          .select('id, existencia')
+          .eq('articulo_id', articuloId)
+          .eq('almacen_id', warehouseId)
+          .maybeSingle();
+
+        if (stockLookupError && stockLookupError.code !== 'PGRST116' && stockLookupError.code !== 'PGRST204') {
+          throw stockLookupError;
+        }
+
+        if (stockRecord) {
+          previousExistence = roundQuantity(stockRecord.existencia ?? 0);
+          existingStockId = stockRecord.id ?? null;
+        }
+
+        const newExistence = roundQuantity(previousExistence + line.cantidad);
+
+        const stockPayload = {
+          articulo_id: articuloId,
+          almacen_id: warehouseId,
+          existencia: newExistence,
+          actualizado_en: timestamp,
+        };
+
+        applyActorAuditFields(stockPayload, actorId);
+
+        if (actorName) {
+          if (!stockPayload.creado_por_nombre) {
+            stockPayload.creado_por_nombre = actorName;
+          }
+
+          stockPayload.modificado_por_nombre = actorName;
+        }
+
+        if (existingStockId !== null && existingStockId !== undefined) {
+          stockPayload.id = existingStockId;
+        }
+
+        const { data: stockData, error: stockError } = await supabaseClient
+          .from(INVENTARIO_ARTICULOS_TABLE)
+          .upsert([stockPayload], { onConflict: 'articulo_id,almacen_id' })
+          .select()
+          .maybeSingle();
+
+        if (stockError) {
+          throw stockError;
+        }
+
+        const updatedStockId = normalizeIdentifier(stockData?.id) ?? existingStockId;
+
+        stockAdjustments.push({
+          articuloId,
+          almacenId: warehouseId,
+          previousExistence,
+          stockId: updatedStockId,
+        });
+      }
+    } catch (stockError) {
+      console.error('Warehouse entry inventory update error:', stockError);
+      await revertStockAdjustments();
+      await supabaseClient.from(LINEAS_ENTRADA_ALMACEN_TABLE).delete().eq('entrada_id', entryId);
+      await supabaseClient.from(ENTRADAS_ALMACEN_TABLE).delete().eq('id', entryId);
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while updating inventory.', stockError));
+    }
+
+    const updatedDetail = buildPurchaseOrderComputedDetail(
+      await fetchPurchaseOrderDetail(orderId)
+    );
+
+    const newStatus = updatedDetail.resumen?.recepcion_completa
+      ? 'Recibida en almacén'
+      : 'Recepción parcial';
+
+    const orderUpdatePayload = {
+      estado: newStatus,
+      actualizado_en: timestamp,
+    };
+
+    if (updatedDetail.resumen?.recepcion_completa) {
+      orderUpdatePayload.fecha_recepcion = updatedDetail.order?.fecha_recepcion ?? timestamp;
+    } else if (!updatedDetail.order?.fecha_recepcion) {
+      orderUpdatePayload.fecha_recepcion = timestamp;
+    }
+
+    applyActorAuditFields(orderUpdatePayload, actorId, { includeCreated: false });
+
+    if (actorName) {
+      orderUpdatePayload.modificado_por_nombre = actorName;
+    }
+
+    const { error: orderUpdateError } = await supabaseClient
+      .from(ORDENES_COMPRA_TABLE)
+      .update(Object.fromEntries(Object.entries(orderUpdatePayload).filter(([, value]) => value !== undefined)))
+      .eq('id', orderId);
+
+    if (orderUpdateError) {
+      console.error('Warehouse entry order status update error:', orderUpdateError);
+    }
+
+    return res.status(201).json({
+      message: 'Entrada de almacén registrada correctamente.',
+      entrada: entryData,
+      lineas: entryLinesData ?? [],
+      orden: updatedDetail.order,
+      resumen: updatedDetail.resumen,
+    });
+  } catch (err) {
+    console.error('Unhandled warehouse entry creation error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while creating warehouse entry.', err));
+  }
+});
+
 const ordenesCompraRouter = express.Router();
 
 ordenesCompraRouter.use(ensureSupabaseConfigured);
@@ -3049,6 +3852,45 @@ ordenesCompraRouter.get('/', async (_req, res) => {
     return res
       .status(500)
       .json(formatUnexpectedErrorResponse('Unexpected error while fetching purchase orders.', err));
+  }
+});
+
+ordenesCompraRouter.get('/:id', async (req, res) => {
+  const { id } = req.params ?? {};
+  const normalizedId = normalizeIdentifier(id);
+
+  if (normalizedId === null || normalizedId === undefined) {
+    return res.status(400).json({ message: 'Identificador de orden inválido.' });
+  }
+
+  try {
+    const detail = await fetchPurchaseOrderDetail(normalizedId);
+
+    if (!detail.order) {
+      return res.status(404).json({ message: 'Orden de compra no encontrada.' });
+    }
+
+    const computed = buildPurchaseOrderComputedDetail(detail);
+
+    return res.json({
+      orden: computed.order,
+      lineas: computed.lines,
+      resumen: computed.resumen,
+      pagos: computed.pagos,
+      entradas: computed.entries,
+      lineas_entrada: computed.entryLines,
+      pagos_registrados: computed.payments,
+    });
+  } catch (err) {
+    console.error('Unhandled purchase order detail error:', err);
+    return res
+      .status(500)
+      .json(
+        formatUnexpectedErrorResponse(
+          'Unexpected error while fetching purchase order detail.',
+          err
+        )
+      );
   }
 });
 
@@ -3414,6 +4256,199 @@ ordenesCompraRouter.post('/', async (req, res) => {
   }
 });
 
+ordenesCompraRouter.post('/:id/procesar_pago', async (req, res) => {
+  const { id } = req.params ?? {};
+  const payload = req.body ?? {};
+  const orderId = normalizeIdentifier(id);
+
+  if (orderId === null || orderId === undefined) {
+    return res.status(400).json({ message: 'Identificador de orden inválido.' });
+  }
+
+  try {
+    const actorId = extractActorId(req, payload);
+    const actorName = extractActorName(req, payload);
+
+    const amountRaw =
+      payload.monto_pago ??
+      payload.montoPago ??
+      payload.monto ??
+      payload.amount ??
+      payload.monto_pagado ??
+      payload.total_pago ??
+      null;
+
+    const paymentAmount = roundCurrency(amountRaw);
+
+    if (!(paymentAmount > 0)) {
+      return res.status(400).json({ message: 'El monto del pago debe ser mayor a cero.' });
+    }
+
+    const currentDetail = buildPurchaseOrderComputedDetail(
+      await fetchPurchaseOrderDetail(orderId)
+    );
+
+    if (!currentDetail.order) {
+      return res.status(404).json({ message: 'La orden de compra no existe.' });
+    }
+
+    if (!currentDetail.resumen?.recepcion_completa) {
+      return res.status(409).json({
+        message: 'La orden aún tiene productos pendientes de recibir en almacén.',
+      });
+    }
+
+    const saldoPendienteAntes = currentDetail.pagos?.saldo_pendiente ?? 0;
+
+    if (paymentAmount > roundCurrency(saldoPendienteAntes + 0.01)) {
+      return res.status(400).json({
+        message: 'El pago excede el saldo pendiente de la orden de compra.',
+        saldoPendiente: saldoPendienteAntes,
+      });
+    }
+
+    const timestamp = new Date().toISOString();
+    const fechaPago = parseDateToIso(
+      payload.fecha_pago ?? payload.fechaPago ?? payload.fecha ?? payload.fecha_operacion
+    ) ?? timestamp;
+
+    const metodoPago =
+      typeof payload.metodo_pago === 'string' && payload.metodo_pago.trim()
+        ? payload.metodo_pago.trim()
+        : typeof payload.metodoPago === 'string' && payload.metodoPago.trim()
+        ? payload.metodoPago.trim()
+        : null;
+
+    const referencia =
+      typeof payload.referencia === 'string' && payload.referencia.trim()
+        ? payload.referencia.trim()
+        : typeof payload.referencia_pago === 'string' && payload.referencia_pago.trim()
+        ? payload.referencia_pago.trim()
+        : null;
+
+    const notas =
+      typeof payload.notas === 'string' && payload.notas.trim()
+        ? payload.notas.trim()
+        : typeof payload.comentarios === 'string' && payload.comentarios.trim()
+        ? payload.comentarios.trim()
+        : null;
+
+    const paymentPayload = {
+      orden_compra_id: orderId,
+      proveedor_id:
+        currentDetail.order?.id_proveedor ??
+        currentDetail.order?.proveedor_id ??
+        currentDetail.order?.supplier_id ??
+        null,
+      monto_pagado: paymentAmount,
+      fecha_pago: fechaPago,
+      metodo_pago: metodoPago,
+      referencia,
+      notas,
+      registrado_por: formatActorLabel(actorId, actorName),
+      creado_en: timestamp,
+      actualizado_en: timestamp,
+    };
+
+    applyActorAuditFields(paymentPayload, actorId);
+
+    if (actorName) {
+      if (!paymentPayload.creado_por_nombre) {
+        paymentPayload.creado_por_nombre = actorName;
+      }
+
+      paymentPayload.modificado_por_nombre = actorName;
+    }
+
+    const cleanedPaymentPayload = Object.fromEntries(
+      Object.entries(paymentPayload).filter(([, value]) => value !== undefined)
+    );
+
+    const { data: paymentData, error: paymentError } = await supabaseClient
+      .from(PAGOS_PROVEEDORES_TABLE)
+      .insert([cleanedPaymentPayload])
+      .select()
+      .maybeSingle();
+
+    if (paymentError) {
+      console.error('Purchase order payment creation error:', paymentError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Unexpected error while registering purchase order payment.',
+            paymentError
+          )
+        );
+    }
+
+    const updatedDetail = buildPurchaseOrderComputedDetail(
+      await fetchPurchaseOrderDetail(orderId)
+    );
+
+    const saldoPendienteDespues = updatedDetail.pagos?.saldo_pendiente ?? 0;
+
+    let nuevoEstado = updatedDetail.order?.estado ?? 'Registrada';
+
+    if (saldoPendienteDespues <= 0) {
+      nuevoEstado = 'Finalizada';
+    } else if (updatedDetail.pagos?.total_pagado > 0) {
+      nuevoEstado = 'Pago parcial';
+    }
+
+    const orderUpdatePayload = {
+      estado: nuevoEstado,
+      actualizado_en: timestamp,
+    };
+
+    if (saldoPendienteDespues <= 0) {
+      orderUpdatePayload.pagada_en = timestamp;
+    }
+
+    applyActorAuditFields(orderUpdatePayload, actorId, { includeCreated: false });
+
+    if (actorName) {
+      orderUpdatePayload.modificado_por_nombre = actorName;
+    }
+
+    const { error: orderUpdateError } = await supabaseClient
+      .from(ORDENES_COMPRA_TABLE)
+      .update(
+        Object.fromEntries(Object.entries(orderUpdatePayload).filter(([, value]) => value !== undefined))
+      )
+      .eq('id', orderId);
+
+    if (orderUpdateError) {
+      console.error('Purchase order payment status update error:', orderUpdateError);
+    }
+
+    const updatedOrder = {
+      ...updatedDetail.order,
+      estado: nuevoEstado,
+      pagada_en: orderUpdatePayload.pagada_en ?? updatedDetail.order?.pagada_en,
+    };
+
+    return res.status(201).json({
+      message: 'Pago registrado correctamente.',
+      pago: paymentData ?? cleanedPaymentPayload,
+      orden: updatedOrder,
+      resumen: updatedDetail.resumen,
+      pagos: updatedDetail.pagos,
+      pagos_registrados: updatedDetail.payments,
+    });
+  } catch (err) {
+    console.error('Unhandled purchase order payment error:', err);
+    return res
+      .status(500)
+      .json(
+        formatUnexpectedErrorResponse(
+          'Unexpected error while registering purchase order payment.',
+          err
+        )
+      );
+  }
+});
+
 const cxcRouter = express.Router();
 
 cxcRouter.use(ensureSupabaseConfigured);
@@ -3743,6 +4778,8 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
 app.use('/api/facturas', facturasRouter);
+app.use('/api/almacenes', almacenesRouter);
+app.use('/api/entradas-almacen', entradasAlmacenRouter);
 app.use('/api/ordenes-compra', ordenesCompraRouter);
 app.use('/api/cxc', cxcRouter);
 

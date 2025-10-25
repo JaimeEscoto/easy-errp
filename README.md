@@ -1,15 +1,30 @@
-# Easy ERRP - Login inicial con Supabase
+# Easy ERRP – Gestión básica de ERP
 
-Este repositorio incluye un ejemplo mínimo de autenticación dividido en **backend** y **frontend** para desplegar en Render empleando Supabase como base de datos.
+Este repositorio contiene un prototipo de ERP enfocado en los flujos clave para controlar artículos, terceros, almacenes y órdenes de compra. Incluye autenticación inicial basada en Supabase, un backend con Express y un frontend estático con múltiples módulos transaccionales.
 
 ## Estructura del proyecto
 
 ```
-├── backend          # API REST con Express que valida las credenciales en Supabase
-├── frontend         # Sitio estático con el formulario de login y llamada al backend
-├── docs             # Documentación adicional
+├── backend          # API REST con Express que opera contra Supabase
+├── frontend         # Sitio estático con dashboards y pantallas operativas
+├── docs             # Documentación adicional (SQL de referencia, etc.)
 └── README.md
 ```
+
+## Funcionalidades principales
+
+- **Maestros**
+  - Artículos con registro, listado y trazabilidad básica.
+  - Clientes y proveedores centralizados en el módulo de terceros.
+  - Almacenes con altas desde el frontend y CRUD vía API (`/api/almacenes`).
+- **Inventario y compras**
+  - Registro de órdenes de compra y sus líneas.
+  - Entradas de almacén vinculadas a órdenes de compra que actualizan existencias (`/api/entradas-almacen`).
+  - Control de inventario por artículo y almacén, con sumatorias automáticas.
+  - Pagos a proveedores asociados a órdenes de compra y actualización de estados (`/api/pagos-proveedores`).
+- **Panel y navegación**
+  - Dashboard con accesos rápidos a todos los módulos.
+  - Menús consistentes entre secciones maestras, transacciones y configuraciones.
 
 ## Requisitos previos
 
@@ -43,6 +58,7 @@ Este repositorio incluye un ejemplo mínimo de autenticación dividido en **back
    > **Importante:** guarda la contraseña que definas porque será la que uses para iniciar sesión.
 
 2. Copia la **Service Role Key** y la **Project URL** desde la sección *Project Settings → API*. Se utilizarán en el backend.
+3. Ejecuta el script de referencia `docs/sql/almacenes-y-entradas.sql` para crear las tablas auxiliares de almacenes, inventario, entradas y pagos a proveedores.
 
 ## Configuración local
 
@@ -64,10 +80,13 @@ Este repositorio incluye un ejemplo mínimo de autenticación dividido en **back
    npm run dev
    ```
 
-   El servidor se ejecutará en `http://localhost:4000` y expone los endpoints:
+   El servidor se ejecutará en `http://localhost:4000` y expone, entre otros, los endpoints:
 
    - `GET /api/health` – Verifica el estado del servicio.
    - `POST /api/login` – Recibe `{ email, password }` y valida contra Supabase.
+   - `GET /api/almacenes` y `POST /api/almacenes` – Consulta y creación de almacenes.
+   - `POST /api/entradas-almacen` – Registra recepciones y actualiza inventario.
+   - `POST /api/pagos-proveedores` – Registra pagos de órdenes de compra y marca las órdenes como pagadas.
 
 ### Frontend
 
@@ -80,6 +99,12 @@ Este repositorio incluye un ejemplo mínimo de autenticación dividido en **back
    Si no estableces `BACKEND_URL`, se utilizará `http://localhost:4000` como valor por defecto.
 
 2. Durante desarrollo puedes abrir `index.html` directamente en el navegador o servirlo con tu herramienta estática preferida. El formulario hará peticiones `fetch` al backend configurado.
+
+3. Para navegar por los módulos del ERP, inicia sesión y utiliza las pantallas disponibles en `frontend/`:
+
+   - `dashboard.html` – Vista general y accesos directos.
+   - `maestros-*.html` – Secciones de administración de artículos, terceros y almacenes.
+   - `transacciones-*.html` – Órdenes de compra, entradas de almacén, pagos a proveedores y ventas.
 
 ## Despliegue en Render
 
