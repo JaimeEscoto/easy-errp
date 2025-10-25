@@ -30,6 +30,7 @@ const supabaseClient =
 const ARTICULOS_TABLE = 'articulos';
 const ARTICULOS_LOG_TABLE_CANDIDATES = ['articulos_log', 'articulos_logs'];
 const FACTURAS_VENTA_TABLE = 'facturas_venta';
+const PAGOS_RECIBIDOS_TABLE = 'pagos_recibidos';
 const LINEAS_FACTURA_TABLE = 'lineas_factura';
 const ORDENES_COMPRA_TABLE = 'ordenes_compra';
 const LINEAS_ORDEN_COMPRA_TABLE = 'lineas_orden_compra';
@@ -2864,10 +2865,336 @@ ordenesCompraRouter.post('/', async (req, res) => {
   }
 });
 
+const cxcRouter = express.Router();
+
+cxcRouter.use(ensureSupabaseConfigured);
+
+cxcRouter.post('/registrar_pago', async (req, res) => {
+  try {
+    const actorId = extractActorId(req);
+    const actorName = extractActorName(req);
+
+    const {
+      id_factura,
+      factura_id,
+      idFactura,
+      facturaId,
+      invoice_id,
+      invoiceId,
+      id_cliente,
+      cliente_id,
+      clienteId,
+      client_id,
+      clientId,
+      id_tercero,
+      tercero_id,
+      terceroId,
+      monto_pago,
+      montoPago,
+      monto,
+      amount,
+      fecha_pago,
+      fechaPago,
+      payment_date,
+      metodo_pago,
+      metodoPago,
+      metodo,
+      forma_pago,
+      referencia,
+      referencia_pago,
+      numero_referencia,
+      notas,
+      comentarios,
+      observaciones,
+    } = req.body ?? {};
+
+    const invoiceIdentifierRaw =
+      id_factura ??
+      factura_id ??
+      idFactura ??
+      facturaId ??
+      invoice_id ??
+      invoiceId ??
+      null;
+    const clientIdentifierRaw =
+      id_cliente ??
+      cliente_id ??
+      clienteId ??
+      client_id ??
+      clientId ??
+      id_tercero ??
+      tercero_id ??
+      terceroId ??
+      null;
+    const paymentAmountRaw = monto_pago ?? montoPago ?? monto ?? amount ?? null;
+
+    const invoiceIdNormalized = normalizeIdentifier(invoiceIdentifierRaw);
+    const clientIdNormalized = normalizeIdentifier(clientIdentifierRaw);
+    const paymentAmount = roundCurrency(paymentAmountRaw);
+
+    if (invoiceIdNormalized === null || invoiceIdNormalized === undefined) {
+      return res.status(400).json({ message: 'El identificador de la factura es obligatorio.' });
+    }
+
+    if (clientIdNormalized === null || clientIdNormalized === undefined) {
+      return res.status(400).json({ message: 'El identificador del cliente es obligatorio.' });
+    }
+
+    if (!(paymentAmount > 0)) {
+      return res.status(400).json({ message: 'El monto del pago debe ser un valor positivo.' });
+    }
+
+    const { data: invoiceData, error: invoiceError } = await supabaseClient
+      .from(FACTURAS_VENTA_TABLE)
+      .select('id, id_cliente, cliente_id, tercero_id, total, estado, total_factura, monto_total')
+      .eq('id', invoiceIdNormalized)
+      .maybeSingle();
+
+    if (invoiceError) {
+      console.error('Customer payment: invoice lookup failed.', invoiceError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Ocurrió un error al validar la factura antes de registrar el pago.',
+            invoiceError
+          )
+        );
+    }
+
+    if (!invoiceData) {
+      return res.status(404).json({ message: 'La factura indicada no existe.' });
+    }
+
+    const invoiceClientCandidates = [
+      invoiceData.id_cliente,
+      invoiceData.cliente_id,
+      invoiceData.tercero_id,
+    ]
+      .map((value) => normalizeIdentifier(value))
+      .filter((value) => value !== null && value !== undefined);
+
+    const invoiceClientMatches = invoiceClientCandidates.some((candidate) => {
+      if (candidate === clientIdNormalized) {
+        return true;
+      }
+
+      if (candidate !== null && candidate !== undefined) {
+        return String(candidate) === String(clientIdNormalized);
+      }
+
+      return false;
+    });
+
+    if (!invoiceClientMatches) {
+      return res.status(404).json({ message: 'La factura no pertenece al cliente indicado.' });
+    }
+
+    const invoiceStatus =
+      typeof invoiceData.estado === 'string' ? invoiceData.estado.trim().toLowerCase() : null;
+
+    if (invoiceStatus === 'pagada') {
+      return res.status(409).json({ message: 'La factura ya figura como pagada.' });
+    }
+
+    const invoiceTotalCandidates = [
+      invoiceData.total,
+      invoiceData.total_factura,
+      invoiceData.monto_total,
+    ];
+    const invoiceTotal = roundCurrency(
+      invoiceTotalCandidates.reduce((acc, candidate) => acc ?? candidate, null)
+    );
+
+    const { data: existingPaymentsData, error: existingPaymentsError } = await supabaseClient
+      .from(PAGOS_RECIBIDOS_TABLE)
+      .select('monto_pago')
+      .eq('id_factura', invoiceIdNormalized);
+
+    if (existingPaymentsError) {
+      console.error('Customer payment: unable to fetch existing payments.', existingPaymentsError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Ocurrió un error al calcular el saldo pendiente de la factura.',
+            existingPaymentsError
+          )
+        );
+    }
+
+    const totalPagadoAnterior = Array.isArray(existingPaymentsData)
+      ? existingPaymentsData.reduce(
+          (acc, pago) => acc + toNumber(pago?.monto_pago ?? pago?.monto ?? 0, 0),
+          0
+        )
+      : 0;
+
+    const totalPagadoNormalizado = roundCurrency(totalPagadoAnterior);
+    const saldoPendiente = roundCurrency(invoiceTotal - totalPagadoNormalizado);
+
+    if (saldoPendiente <= 0) {
+      return res.status(409).json({ message: 'La factura no tiene saldo pendiente.' });
+    }
+
+    if (paymentAmount > saldoPendiente) {
+      return res.status(400).json({ message: 'El monto del pago excede el saldo pendiente.' });
+    }
+
+    const timestamp = new Date().toISOString();
+    const paymentDateIso = parseDateToIso(fecha_pago ?? fechaPago ?? payment_date) ?? timestamp;
+    const paymentMethod =
+      metodo_pago ?? metodoPago ?? metodo ?? forma_pago ?? null;
+    const paymentReference = referencia ?? referencia_pago ?? numero_referencia ?? null;
+    const paymentNotes = notas ?? comentarios ?? observaciones ?? null;
+
+    const paymentPayload = {
+      id_factura: invoiceIdNormalized,
+      id_cliente: clientIdNormalized,
+      monto_pago: paymentAmount,
+      fecha_pago: paymentDateIso,
+      metodo_pago: paymentMethod ?? undefined,
+      referencia: paymentReference ?? undefined,
+      notas: paymentNotes ?? undefined,
+      creado_en: timestamp,
+      modificado_en: timestamp,
+    };
+
+    applyActorAuditFields(paymentPayload, actorId);
+
+    if (actorName) {
+      paymentPayload.creado_por_nombre = paymentPayload.creado_por_nombre ?? actorName;
+      paymentPayload.modificado_por_nombre = paymentPayload.modificado_por_nombre ?? actorName;
+    }
+
+    const cleanedPaymentPayload = Object.fromEntries(
+      Object.entries(paymentPayload).filter(([, value]) => value !== undefined)
+    );
+
+    const { data: insertedPayment, error: paymentInsertError } = await supabaseClient
+      .from(PAGOS_RECIBIDOS_TABLE)
+      .insert([cleanedPaymentPayload])
+      .select()
+      .maybeSingle();
+
+    if (paymentInsertError) {
+      console.error('Customer payment: insertion failed.', paymentInsertError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Ocurrió un error al registrar el pago del cliente.',
+            paymentInsertError
+          )
+        );
+    }
+
+    const saldoDespuesDelPago = roundCurrency(saldoPendiente - paymentAmount);
+    const estadoFacturaActualizado = saldoDespuesDelPago <= 0 ? 'Pagada' : 'Pendiente de Pago';
+
+    const invoiceUpdatePayload = {
+      estado: estadoFacturaActualizado,
+      modificado_en: timestamp,
+      actualizado_en: timestamp,
+      updated_at: timestamp,
+    };
+
+    applyActorAuditFields(invoiceUpdatePayload, actorId, { includeCreated: false });
+
+    if (actorName) {
+      invoiceUpdatePayload.modificado_por_nombre = invoiceUpdatePayload.modificado_por_nombre ?? actorName;
+    }
+
+    const cleanedInvoiceUpdatePayload = Object.fromEntries(
+      Object.entries(invoiceUpdatePayload).filter(([, value]) => value !== undefined)
+    );
+
+    const {
+      data: updatedInvoice,
+      error: invoiceUpdateError,
+    } = await supabaseClient
+      .from(FACTURAS_VENTA_TABLE)
+      .update(cleanedInvoiceUpdatePayload)
+      .eq('id', invoiceIdNormalized)
+      .select()
+      .maybeSingle();
+
+    if (invoiceUpdateError) {
+      console.error('Customer payment: invoice update failed, reverting payment.', invoiceUpdateError);
+
+      if (insertedPayment?.id !== undefined && insertedPayment?.id !== null) {
+        try {
+          await supabaseClient
+            .from(PAGOS_RECIBIDOS_TABLE)
+            .delete()
+            .eq('id', insertedPayment.id);
+        } catch (rollbackError) {
+          console.error('Customer payment: rollback failed after invoice update error.', rollbackError);
+        }
+      }
+
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Ocurrió un error al actualizar el estado de la factura después de registrar el pago.',
+            invoiceUpdateError
+          )
+        );
+    }
+
+    let facturaActualizada = updatedInvoice;
+
+    if (!facturaActualizada) {
+      try {
+        const { data: refetchedInvoice } = await supabaseClient
+          .from(FACTURAS_VENTA_TABLE)
+          .select('*')
+          .eq('id', invoiceIdNormalized)
+          .maybeSingle();
+
+        if (refetchedInvoice) {
+          facturaActualizada = refetchedInvoice;
+        }
+      } catch (refetchError) {
+        console.warn('Customer payment: unable to refetch invoice after update.', refetchError);
+      }
+    }
+
+    const totalPagadoActual = roundCurrency(totalPagadoNormalizado + paymentAmount);
+
+    return res.status(201).json({
+      message: 'Pago registrado correctamente.',
+      pago: insertedPayment,
+      factura: facturaActualizada ?? {
+        ...invoiceData,
+        estado: estadoFacturaActualizado,
+      },
+      resumen_saldo: {
+        saldo_anterior: saldoPendiente,
+        monto_pagado: paymentAmount,
+        saldo_pendiente: saldoDespuesDelPago < 0 ? 0 : saldoDespuesDelPago,
+        total_pagado: totalPagadoActual,
+      },
+    });
+  } catch (err) {
+    console.error('Customer payment: unexpected error.', err);
+    return res
+      .status(500)
+      .json(
+        formatUnexpectedErrorResponse(
+          'Ocurrió un error inesperado al registrar el pago del cliente.',
+          err
+        )
+      );
+  }
+});
+
 app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
 app.use('/api/facturas', facturasRouter);
 app.use('/api/ordenes-compra', ordenesCompraRouter);
+app.use('/api/cxc', cxcRouter);
 
 app.post('/api/login', async (req, res) => {
   if (!supabaseClient) {
