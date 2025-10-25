@@ -167,6 +167,29 @@ const sanitizeNumericAuditFields = (payload, fields = []) => {
   }
 };
 
+const sanitizeArticuloPayloadForInsert = (input = {}) => {
+  if (!input || typeof input !== 'object') {
+    return {};
+  }
+
+  const payload = { ...input };
+
+  sanitizeNumericAuditFields(payload, ['creado_por', 'created_by', 'modificado_por']);
+
+  if (hasOwn(payload, 'creado_por') && !hasOwn(payload, 'created_by')) {
+    payload.created_by = payload.creado_por;
+  }
+
+  if (hasOwn(payload, 'creado_por_nombre') && !hasOwn(payload, 'created_by_name')) {
+    payload.created_by_name = payload.creado_por_nombre;
+  }
+
+  delete payload.creado_por;
+  delete payload.creado_por_nombre;
+
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+};
+
 const applyActorAuditFields = (
   payload,
   actorId,
@@ -216,7 +239,7 @@ const extractActorId = (req, payload = {}) => {
     }
   }
 
-  const bodyCandidates = ['modificado_por', 'creado_por', 'admin_id', 'user_id'];
+  const bodyCandidates = ['modificado_por', 'creado_por', 'created_by', 'admin_id', 'user_id'];
 
   for (const key of bodyCandidates) {
     const value = payload?.[key] ?? req.body?.[key];
@@ -244,6 +267,7 @@ const extractActorName = (req, payload = {}) => {
     'modificado_por_nombre',
     'modificado_por_label',
     'creado_por_nombre',
+    'created_by_name',
     'actor_name',
     'actor_label',
     'admin_name',
@@ -270,6 +294,7 @@ const TRACKED_FIELDS = [
   'unidad',
   'activo',
   'creado_por',
+  'created_by',
   'modificado_por',
 ];
 
@@ -1761,10 +1786,21 @@ articulosRouter.use(ensureSupabaseConfigured);
 
 articulosRouter.post('/', async (req, res) => {
   try {
-    const payload = req.body ?? {};
+    const incoming = req.body ?? {};
 
-    const actorId = extractActorId(req, payload);
-    const actorName = extractActorName(req, payload);
+    const actorId = extractActorId(req, incoming);
+    const actorName = extractActorName(req, incoming);
+
+    const payload = sanitizeArticuloPayloadForInsert(incoming);
+    const numericActorId = coerceToNumericId(actorId);
+
+    if (numericActorId !== null && !hasOwn(payload, 'created_by')) {
+      payload.created_by = numericActorId;
+    }
+
+    if (actorName && !hasOwn(payload, 'created_by_name')) {
+      payload.created_by_name = actorName;
+    }
 
     const { data, error } = await supabaseClient
       .from(ARTICULOS_TABLE)
