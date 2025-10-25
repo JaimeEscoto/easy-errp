@@ -731,6 +731,32 @@ const getThirdPartyDisplayName = (thirdParty = {}) => {
   return 'Cliente sin nombre';
 };
 
+const getSupplierDisplayName = (thirdParty = {}) => {
+  const candidates = [
+    thirdParty.nombre_comercial,
+    thirdParty.razon_social,
+    thirdParty.nombre,
+    thirdParty.denominacion,
+    thirdParty.display_name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  if (thirdParty.identificacion_fiscal) {
+    return String(thirdParty.identificacion_fiscal);
+  }
+
+  if (thirdParty.id !== undefined && thirdParty.id !== null) {
+    return `Proveedor ${thirdParty.id}`;
+  }
+
+  return 'Proveedor sin nombre';
+};
+
 const buildThirdPartyLookupKey = (thirdParty = {}) => {
   const candidates = [
     thirdParty.id,
@@ -2246,6 +2272,35 @@ const ordenesCompraRouter = express.Router();
 
 ordenesCompraRouter.use(ensureSupabaseConfigured);
 
+const extractPurchaseOrderSupplierIdentifier = (payload = {}) => {
+  const candidates = [
+    payload.id_proveedor,
+    payload.proveedor_id,
+    payload.proveedorId,
+    payload.supplier_id,
+    payload.supplierId,
+    payload.idProveedor,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) {
+      continue;
+    }
+
+    if (typeof candidate === 'string') {
+      if (candidate.trim()) {
+        return candidate;
+      }
+
+      continue;
+    }
+
+    return candidate;
+  }
+
+  return null;
+};
+
 const extractPurchaseOrderLines = (payload = {}) => {
   const candidates = [
     payload.lineas_orden,
@@ -2285,6 +2340,167 @@ const normalizePurchaseOrderLineType = (value, hasArticle = false) => {
 
   return hasArticle ? 'Producto' : 'Servicio';
 };
+
+ordenesCompraRouter.get('/', async (_req, res) => {
+  try {
+    const { data: ordenesData, error: ordenesError } = await supabaseClient
+      .from(ORDENES_COMPRA_TABLE)
+      .select('*')
+      .order('fecha_orden', { ascending: false })
+      .order('creado_en', { ascending: false });
+
+    if (ordenesError) {
+      console.error('Purchase order list error:', ordenesError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Unexpected error while fetching purchase orders.',
+            ordenesError
+          )
+        );
+    }
+
+    const ordenes = Array.isArray(ordenesData) ? ordenesData : [];
+
+    const orderEntries = ordenes.map((orden) => {
+      const rawSupplierIdentifier = extractPurchaseOrderSupplierIdentifier(orden);
+      const normalizedSupplierIdentifier = normalizeIdentifier(rawSupplierIdentifier);
+      const supplierKey =
+        normalizedSupplierIdentifier !== null && normalizedSupplierIdentifier !== undefined
+          ? String(normalizedSupplierIdentifier)
+          : null;
+
+      return {
+        orden,
+        supplierKey,
+        normalizedSupplierIdentifier,
+      };
+    });
+
+    const numericSupplierIds = new Set();
+    const stringSupplierIds = new Set();
+
+    for (const entry of orderEntries) {
+      if (entry.normalizedSupplierIdentifier === null || entry.normalizedSupplierIdentifier === undefined) {
+        continue;
+      }
+
+      if (typeof entry.normalizedSupplierIdentifier === 'number') {
+        numericSupplierIds.add(entry.normalizedSupplierIdentifier);
+      } else if (typeof entry.normalizedSupplierIdentifier === 'string') {
+        stringSupplierIds.add(entry.normalizedSupplierIdentifier);
+      }
+    }
+
+    const supplierLookup = new Map();
+
+    const addSuppliersToLookup = (records = []) => {
+      for (const record of records ?? []) {
+        const key = buildThirdPartyLookupKey(record);
+
+        if (key) {
+          supplierLookup.set(key, record);
+        }
+      }
+    };
+
+    const fetchSuppliersByColumn = async (column, values) => {
+      if (!values.length) {
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from(TERCEROS_TABLE)
+        .select('*')
+        .in(column, values);
+
+      if (error) {
+        if (error.code === '42703') {
+          console.warn(`Purchase order list warning: column ${column} is not available on terceros table.`);
+          return;
+        }
+
+        throw error;
+      }
+
+      addSuppliersToLookup(data);
+    };
+
+    try {
+      const numericValues = Array.from(numericSupplierIds);
+      const stringValues = Array.from(stringSupplierIds);
+
+      if (numericValues.length) {
+        await fetchSuppliersByColumn('id', numericValues);
+        await fetchSuppliersByColumn('tercero_id', numericValues);
+      }
+
+      if (stringValues.length) {
+        await fetchSuppliersByColumn('id', stringValues);
+        await fetchSuppliersByColumn('tercero_id', stringValues);
+        await fetchSuppliersByColumn('identificacion_fiscal', stringValues);
+      }
+    } catch (supplierError) {
+      console.error('Purchase order list supplier lookup error:', supplierError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Unexpected error while fetching purchase order suppliers.',
+            supplierError
+          )
+        );
+    }
+
+    const enrichedOrdenes = orderEntries.map((entry) => {
+      const existingSupplier = entry.orden?.proveedor ?? null;
+
+      if (entry.supplierKey && supplierLookup.has(entry.supplierKey)) {
+        const supplierRecord = supplierLookup.get(entry.supplierKey);
+        const enhancedSupplier =
+          supplierRecord && !supplierRecord.display_name
+            ? { ...supplierRecord, display_name: getSupplierDisplayName(supplierRecord) }
+            : supplierRecord;
+
+        const normalizedSupplier = enhancedSupplier ?? supplierRecord ?? null;
+
+        if (
+          normalizedSupplier &&
+          existingSupplier &&
+          typeof normalizedSupplier === 'object' &&
+          typeof existingSupplier === 'object'
+        ) {
+          return {
+            ...entry.orden,
+            proveedor: { ...existingSupplier, ...normalizedSupplier },
+          };
+        }
+
+        return {
+          ...entry.orden,
+          proveedor: normalizedSupplier ?? existingSupplier ?? null,
+        };
+      }
+
+      return {
+        ...entry.orden,
+        proveedor: existingSupplier,
+      };
+    });
+
+    return res.json({
+      ordenes: enrichedOrdenes,
+      total: enrichedOrdenes.length,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Unhandled purchase order list error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while fetching purchase orders.', err));
+  }
+});
 
 ordenesCompraRouter.post('/', async (req, res) => {
   const payload = req.body && typeof req.body === 'object' ? { ...req.body } : {};
