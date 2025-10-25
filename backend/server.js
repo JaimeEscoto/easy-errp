@@ -4565,7 +4565,7 @@ cxcRouter.post('/registrar_pago', async (req, res) => {
 
     const { data: invoiceData, error: invoiceError } = await supabaseClient
       .from(FACTURAS_VENTA_TABLE)
-      .select('id, id_cliente, cliente_id, tercero_id, total, estado, monto_total')
+      .select('id, id_cliente, cliente_id, tercero_id, total, estado')
       .eq('id', invoiceIdNormalized)
       .maybeSingle();
 
