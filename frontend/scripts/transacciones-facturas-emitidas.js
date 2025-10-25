@@ -46,6 +46,10 @@ const paymentSubmitButton = paymentForm?.querySelector('[data-payment-submit]');
 let currentInvoices = [];
 let selectedInvoiceForPayment = null;
 const paymentSubmitOriginalLabel = paymentSubmitButton?.textContent ?? '';
+const invoicePaymentsCache = new Map();
+
+const getInvoiceColumnCount = () =>
+  invoiceTableBody?.closest('table')?.querySelectorAll('thead th').length ?? 1;
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -167,8 +171,21 @@ const getInvoiceSubtotalValue = (invoice = {}) =>
 const getInvoiceTaxesValue = (invoice = {}) =>
   pickField(invoice, ['total_impuestos', 'totalImpuestos', 'impuestos', 'taxes', 'total_iva']) ?? 0;
 
-const getInvoiceTotalValue = (invoice = {}) =>
-  pickField(invoice, ['total', 'total_factura', 'monto_total', 'importe_total', 'gran_total']) ?? 0;
+const getInvoiceTotalValue = (invoice = {}) => {
+  const summaryTotal =
+    invoice?.pagos_resumen?.total_factura ??
+    invoice?.pagos?.total_factura ??
+    invoice?.pagos?.totalFactura ??
+    null;
+
+  if (summaryTotal !== null && summaryTotal !== undefined && summaryTotal !== '') {
+    return summaryTotal;
+  }
+
+  return (
+    pickField(invoice, ['total', 'total_factura', 'monto_total', 'importe_total', 'gran_total']) ?? 0
+  );
+};
 
 const getInvoiceClientRecord = (invoice = {}) =>
   invoice.cliente ?? invoice.customer ?? invoice.tercero ?? invoice.client ?? null;
@@ -265,6 +282,49 @@ const getInvoiceStatus = (invoice = {}) => {
   return 'Sin estado';
 };
 
+const getPaymentAmountValue = (payment = {}) =>
+  toNumber(pickField(payment, ['monto_pago', 'monto', 'importe', 'valor', 'amount']), 0);
+
+const getPaymentDateValue = (payment = {}) =>
+  pickField(payment, ['fecha_pago', 'fecha', 'fechaPago', 'created_at', 'creado_en', 'modificado_en']);
+
+const normalizePaymentText = (value) => {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  return String(value);
+};
+
+const getPaymentMethodValue = (payment = {}) =>
+  normalizePaymentText(
+    pickField(payment, ['metodo_pago', 'metodoPago', 'metodo', 'forma_pago', 'formaPago', 'payment_method'])
+  );
+
+const getPaymentReferenceValue = (payment = {}) =>
+  normalizePaymentText(
+    pickField(payment, ['referencia', 'referencia_pago', 'numero_referencia', 'reference'])
+  );
+
+const getPaymentNotesValue = (payment = {}) =>
+  normalizePaymentText(pickField(payment, ['notas', 'nota', 'comentarios', 'observaciones']));
+
+const getPaymentActorValue = (payment = {}) =>
+  normalizePaymentText(
+    pickField(payment, [
+      'creado_por_nombre',
+      'registrado_por',
+      'registradoPor',
+      'capturado_por',
+      'created_by_name',
+      'created_by',
+    ])
+  );
+
 const getStatusBadgeClass = (status) => {
   const normalized = typeof status === 'string' ? status.trim().toLowerCase() : '';
 
@@ -287,17 +347,41 @@ const getStatusBadgeClass = (status) => {
   return 'bg-gray-100 text-gray-700';
 };
 
-const getInvoicePaidAmountValue = (invoice = {}) =>
-  pickField(invoice, [
-    'monto_pagado',
-    'total_pagado',
-    'pagado',
-    'monto_total_pagado',
-    'total_abonos',
-    'total_abonado',
-  ]) ?? 0;
+const getInvoicePaidAmountValue = (invoice = {}) => {
+  const summaryPaid =
+    invoice?.pagos_resumen?.total_pagado ??
+    invoice?.pagos?.total_pagado ??
+    invoice?.pagos?.totalPagado ??
+    null;
+
+  if (summaryPaid !== null && summaryPaid !== undefined && summaryPaid !== '') {
+    return summaryPaid;
+  }
+
+  return (
+    pickField(invoice, [
+      'monto_pagado',
+      'total_pagado',
+      'pagado',
+      'monto_total_pagado',
+      'total_abonos',
+      'total_abonado',
+    ]) ?? 0
+  );
+};
 
 const getInvoicePendingAmountValue = (invoice = {}) => {
+  const summaryPending =
+    invoice?.pagos_resumen?.saldo_pendiente ??
+    invoice?.pagos_resumen?.saldoPendiente ??
+    invoice?.pagos?.saldo_pendiente ??
+    invoice?.pagos?.saldoPendiente ??
+    null;
+
+  if (summaryPending !== null && summaryPending !== undefined && summaryPending !== '') {
+    return toNumber(summaryPending, 0);
+  }
+
   const explicitPending = pickField(invoice, [
     'saldo_pendiente',
     'saldoPendiente',
@@ -475,7 +559,325 @@ const openPaymentModal = (invoice) => {
   }, 50);
 };
 
+const renderInvoicePaymentsLoading = (container) => {
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = '';
+  const loadingWrapper = document.createElement('div');
+  loadingWrapper.className = 'flex items-center gap-2 text-sm text-blue-700';
+
+  const spinner = document.createElement('span');
+  spinner.className =
+    'inline-flex h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600';
+  spinner.setAttribute('aria-hidden', 'true');
+  loadingWrapper.appendChild(spinner);
+
+  const label = document.createElement('span');
+  label.textContent = 'Cargando pagos…';
+  loadingWrapper.appendChild(label);
+
+  container.appendChild(loadingWrapper);
+};
+
+const renderInvoicePaymentsError = (container, message, { onRetry } = {}) => {
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700';
+
+  const messageElement = document.createElement('p');
+  messageElement.textContent = message ?? 'Ocurrió un error al consultar los pagos de la factura.';
+  wrapper.appendChild(messageElement);
+
+  if (typeof onRetry === 'function') {
+    const retryButton = document.createElement('button');
+    retryButton.type = 'button';
+    retryButton.className =
+      'mt-3 inline-flex items-center rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400';
+    retryButton.textContent = 'Reintentar';
+    retryButton.addEventListener('click', () => onRetry());
+    wrapper.appendChild(retryButton);
+  }
+
+  container.appendChild(wrapper);
+};
+
+const renderInvoicePaymentsList = (container, payments = [], summary = {}, invoice = {}) => {
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'space-y-4';
+  container.appendChild(wrapper);
+
+  const summaryCard = document.createElement('div');
+  summaryCard.className = 'rounded-2xl border border-blue-100 bg-white px-4 py-4 shadow-sm';
+  wrapper.appendChild(summaryCard);
+
+  const summaryTitle = document.createElement('h4');
+  summaryTitle.className = 'text-sm font-semibold text-blue-800';
+  summaryTitle.textContent = 'Resumen de pagos';
+  summaryCard.appendChild(summaryTitle);
+
+  const summaryList = document.createElement('dl');
+  summaryList.className = 'mt-3 grid gap-3 text-sm sm:grid-cols-4';
+  summaryCard.appendChild(summaryList);
+
+  const addSummaryItem = (label, value, { emphasize = false } = {}) => {
+    const itemWrapper = document.createElement('div');
+    const term = document.createElement('dt');
+    term.className = 'text-xs uppercase tracking-wide text-gray-500';
+    term.textContent = label;
+    const detail = document.createElement('dd');
+    detail.className = emphasize
+      ? 'mt-1 text-lg font-semibold text-blue-700'
+      : 'mt-1 font-medium text-gray-900';
+    detail.textContent = value;
+    itemWrapper.appendChild(term);
+    itemWrapper.appendChild(detail);
+    summaryList.appendChild(itemWrapper);
+  };
+
+  addSummaryItem(
+    'Total facturado',
+    formatCurrency(summary?.total_factura ?? getInvoiceTotalValue(invoice))
+  );
+  addSummaryItem(
+    'Total pagado',
+    formatCurrency(summary?.total_pagado ?? getInvoicePaidAmountValue(invoice))
+  );
+  addSummaryItem(
+    'Saldo pendiente',
+    formatCurrency(summary?.saldo_pendiente ?? getInvoicePendingAmountValue(invoice)),
+    { emphasize: true }
+  );
+
+  const registeredPaymentsCount =
+    summary?.cantidad_pagos ?? (Array.isArray(payments) ? payments.length : 0);
+  addSummaryItem('Pagos registrados', String(registeredPaymentsCount));
+
+  if (summary?.fecha_ultimo_pago) {
+    const lastPayment = document.createElement('p');
+    lastPayment.className = 'mt-3 text-xs text-gray-500';
+    const dateLabel = formatDateOnly(summary.fecha_ultimo_pago);
+    const timeLabel = formatTimeOnly(summary.fecha_ultimo_pago);
+    lastPayment.textContent = timeLabel
+      ? `Último pago registrado el ${dateLabel} a las ${timeLabel}.`
+      : `Último pago registrado el ${dateLabel}.`;
+    summaryCard.appendChild(lastPayment);
+  }
+
+  if (!Array.isArray(payments) || !payments.length) {
+    const emptyState = document.createElement('div');
+    emptyState.className =
+      'rounded-xl border border-dashed border-gray-300 bg-white/60 px-4 py-6 text-center text-sm text-gray-500';
+    emptyState.textContent = 'No se han registrado pagos para esta factura.';
+    wrapper.appendChild(emptyState);
+    return;
+  }
+
+  const listContainer = document.createElement('div');
+  listContainer.className = 'space-y-3';
+  wrapper.appendChild(listContainer);
+
+  for (const payment of payments) {
+    const paymentCard = document.createElement('article');
+    paymentCard.className = 'rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm';
+
+    const header = document.createElement('div');
+    header.className = 'flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between';
+    paymentCard.appendChild(header);
+
+    const amountElement = document.createElement('p');
+    amountElement.className = 'text-base font-semibold text-gray-900';
+    amountElement.textContent = formatCurrency(getPaymentAmountValue(payment));
+    header.appendChild(amountElement);
+
+    const dateValue = getPaymentDateValue(payment);
+    const dateElement = document.createElement('p');
+    dateElement.className = 'text-sm text-gray-500';
+    const dateLabel = formatDateOnly(dateValue);
+    const timeLabel = formatTimeOnly(dateValue);
+    dateElement.textContent = timeLabel ? `${dateLabel} · ${timeLabel}` : dateLabel;
+    header.appendChild(dateElement);
+
+    const badgeContainer = document.createElement('div');
+    badgeContainer.className = 'mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600';
+
+    const methodValue = getPaymentMethodValue(payment);
+    if (methodValue) {
+      const methodBadge = document.createElement('span');
+      methodBadge.className =
+        'inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700';
+      methodBadge.textContent = methodValue;
+      badgeContainer.appendChild(methodBadge);
+    }
+
+    const referenceValue = getPaymentReferenceValue(payment);
+    if (referenceValue) {
+      const referenceBadge = document.createElement('span');
+      referenceBadge.className = 'inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1';
+      referenceBadge.textContent = `Ref: ${referenceValue}`;
+      badgeContainer.appendChild(referenceBadge);
+    }
+
+    const actorValue = getPaymentActorValue(payment);
+    if (actorValue) {
+      const actorBadge = document.createElement('span');
+      actorBadge.className = 'inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1';
+      actorBadge.textContent = `Registrado por ${actorValue}`;
+      badgeContainer.appendChild(actorBadge);
+    }
+
+    if (badgeContainer.childElementCount) {
+      paymentCard.appendChild(badgeContainer);
+    }
+
+    const notesValue = getPaymentNotesValue(payment);
+    if (notesValue) {
+      const notesElement = document.createElement('p');
+      notesElement.className = 'mt-3 text-sm text-gray-600';
+      notesElement.textContent = notesValue;
+      paymentCard.appendChild(notesElement);
+    }
+
+    listContainer.appendChild(paymentCard);
+  }
+};
+
+const closeInvoicePaymentsRow = (row) => {
+  if (!row) {
+    return;
+  }
+
+  row.dataset.expanded = 'false';
+  row.classList.remove('bg-blue-50/40');
+  const icon = row.querySelector('[data-invoice-toggle-icon]');
+
+  if (icon) {
+    icon.textContent = '▸';
+  }
+
+  const detailRow = row.nextElementSibling;
+
+  if (detailRow?.dataset?.role === 'invoice-payments-detail') {
+    detailRow.remove();
+  }
+};
+
+const openInvoicePaymentsRow = async (row, invoice) => {
+  if (!row || !invoice) {
+    return;
+  }
+
+  const columnCount = getInvoiceColumnCount();
+  let detailRow = row.nextElementSibling;
+
+  if (!detailRow || detailRow.dataset.role !== 'invoice-payments-detail') {
+    detailRow = document.createElement('tr');
+    detailRow.dataset.role = 'invoice-payments-detail';
+    const detailCell = document.createElement('td');
+    detailCell.colSpan = columnCount;
+    detailCell.className = 'bg-slate-50 px-6 py-5 text-sm text-gray-700';
+    detailRow.appendChild(detailCell);
+    row.after(detailRow);
+  }
+
+  const detailCell = detailRow.firstElementChild;
+
+  row.dataset.expanded = 'true';
+  row.classList.add('bg-blue-50/40');
+  const icon = row.querySelector('[data-invoice-toggle-icon]');
+
+  if (icon) {
+    icon.textContent = '▾';
+  }
+
+  const invoiceIdValue = getInvoiceIdValue(invoice);
+
+  if (invoiceIdValue === null || invoiceIdValue === undefined) {
+    renderInvoicePaymentsError(detailCell, 'No se pudo identificar la factura seleccionada.');
+    return;
+  }
+
+  const cacheKey = String(invoiceIdValue);
+  const cached = invoicePaymentsCache.get(cacheKey);
+
+  if (cached?.status === 'loaded') {
+    renderInvoicePaymentsList(detailCell, cached.payments, cached.summary, invoice);
+    return;
+  }
+
+  if (cached?.status === 'error') {
+    renderInvoicePaymentsError(detailCell, cached.message, {
+      onRetry: () => {
+        invoicePaymentsCache.delete(cacheKey);
+        openInvoicePaymentsRow(row, invoice);
+      },
+    });
+    return;
+  }
+
+  renderInvoicePaymentsLoading(detailCell);
+
+  if (cached?.status === 'loading') {
+    return;
+  }
+
+  invoicePaymentsCache.set(cacheKey, { status: 'loading' });
+
+  try {
+    const response = await fetch(
+      buildUrl(`/api/cxc/facturas/${encodeURIComponent(cacheKey)}/pagos`)
+    );
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = payload?.message ?? 'No fue posible consultar los pagos de la factura.';
+      throw new Error(message);
+    }
+
+    const payments = Array.isArray(payload?.pagos) ? payload.pagos : [];
+    const summary = payload?.resumen ?? {};
+    invoicePaymentsCache.set(cacheKey, {
+      status: 'loaded',
+      payments,
+      summary,
+    });
+
+    if (row.dataset.expanded === 'true') {
+      renderInvoicePaymentsList(detailCell, payments, summary, invoice);
+    }
+  } catch (err) {
+    console.error('Error al consultar los pagos de la factura:', err);
+    const message = err?.message ?? 'Ocurrió un error al consultar los pagos de la factura.';
+    invoicePaymentsCache.set(cacheKey, {
+      status: 'error',
+      message,
+    });
+
+    if (row.dataset.expanded === 'true') {
+      renderInvoicePaymentsError(detailCell, message, {
+        onRetry: () => {
+          invoicePaymentsCache.delete(cacheKey);
+          openInvoicePaymentsRow(row, invoice);
+        },
+      });
+    }
+  }
+};
+
 const renderInvoices = (invoices = [], updateTimestamp = true) => {
+  invoicePaymentsCache.clear();
   invoiceTableBody.innerHTML = '';
 
   currentInvoices = Array.isArray(invoices) ? invoices : [];
@@ -495,11 +897,39 @@ const renderInvoices = (invoices = [], updateTimestamp = true) => {
   let totalAcumulado = 0;
 
   for (const invoice of invoices) {
+    const invoiceIdValue = getInvoiceIdValue(invoice);
+    const clientIdValue = getInvoiceClientIdValue(invoice);
+    const pendingAmount = getInvoicePendingAmountValue(invoice);
+    const isExpandable = invoiceIdValue !== null && invoiceIdValue !== undefined;
+
     const row = document.createElement('tr');
+
+    if (isExpandable) {
+      row.dataset.invoiceId = String(invoiceIdValue);
+      row.dataset.expanded = 'false';
+      row.classList.add('cursor-pointer', 'transition-colors', 'hover:bg-gray-50');
+    }
 
     const folioCell = document.createElement('td');
     folioCell.className = 'whitespace-nowrap px-4 py-3 text-sm text-gray-500';
-    folioCell.textContent = getInvoiceFolio(invoice);
+
+    if (isExpandable) {
+      const folioWrapper = document.createElement('div');
+      folioWrapper.className = 'flex items-center gap-2';
+      const toggleIcon = document.createElement('span');
+      toggleIcon.className = 'text-base leading-none text-gray-400';
+      toggleIcon.textContent = '▸';
+      toggleIcon.setAttribute('aria-hidden', 'true');
+      toggleIcon.dataset.invoiceToggleIcon = 'true';
+      folioWrapper.appendChild(toggleIcon);
+      const folioLabel = document.createElement('span');
+      folioLabel.textContent = getInvoiceFolio(invoice);
+      folioWrapper.appendChild(folioLabel);
+      folioCell.appendChild(folioWrapper);
+    } else {
+      folioCell.textContent = getInvoiceFolio(invoice);
+    }
+
     row.appendChild(folioCell);
 
     const dateCell = document.createElement('td');
@@ -567,6 +997,11 @@ const renderInvoices = (invoices = [], updateTimestamp = true) => {
     totalCell.textContent = formatCurrency(totalValue);
     row.appendChild(totalCell);
 
+    const balanceCell = document.createElement('td');
+    balanceCell.className = 'whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-blue-700';
+    balanceCell.textContent = formatCurrency(pendingAmount);
+    row.appendChild(balanceCell);
+
     const actionsCell = document.createElement('td');
     actionsCell.className = 'whitespace-nowrap px-4 py-3 text-right text-sm';
     const paymentButton = document.createElement('button');
@@ -574,10 +1009,6 @@ const renderInvoices = (invoices = [], updateTimestamp = true) => {
     paymentButton.className =
       'inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1';
     paymentButton.textContent = 'Registrar pago';
-
-    const invoiceIdValue = getInvoiceIdValue(invoice);
-    const clientIdValue = getInvoiceClientIdValue(invoice);
-    const pendingAmount = getInvoicePendingAmountValue(invoice);
 
     const isPayable =
       invoiceIdValue !== null &&
@@ -587,7 +1018,10 @@ const renderInvoices = (invoices = [], updateTimestamp = true) => {
       pendingAmount > 0;
 
     if (isPayable) {
-      paymentButton.addEventListener('click', () => openPaymentModal(invoice));
+      paymentButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openPaymentModal(invoice);
+      });
     } else {
       paymentButton.disabled = true;
       paymentButton.classList.add('cursor-not-allowed', 'opacity-60');
@@ -596,6 +1030,20 @@ const renderInvoices = (invoices = [], updateTimestamp = true) => {
 
     actionsCell.appendChild(paymentButton);
     row.appendChild(actionsCell);
+
+    if (isExpandable) {
+      row.addEventListener('click', async (event) => {
+        if (event.target.closest('button, a, input, textarea, select, label')) {
+          return;
+        }
+
+        if (row.dataset.expanded === 'true') {
+          closeInvoicePaymentsRow(row);
+        } else {
+          await openInvoicePaymentsRow(row, invoice);
+        }
+      });
+    }
 
     invoiceTableBody.appendChild(row);
   }

@@ -2301,9 +2301,134 @@ facturasRouter.get('/', async (_req, res) => {
       return entry.factura;
     });
 
+    const invoiceNumericIds = new Set();
+
+    for (const factura of enrichedFacturas) {
+      const candidates = [factura?.id, factura?.factura_id];
+
+      for (const candidate of candidates) {
+        const normalized = coerceToNumericId(candidate);
+
+        if (normalized !== null) {
+          invoiceNumericIds.add(normalized);
+        }
+      }
+    }
+
+    const paymentTotalsByInvoice = new Map();
+    const paymentCountsByInvoice = new Map();
+
+    if (invoiceNumericIds.size) {
+      const { data: pagosData, error: pagosError } = await supabaseClient
+        .from(PAGOS_RECIBIDOS_TABLE)
+        .select('id_factura, monto_pago, monto')
+        .in('id_factura', Array.from(invoiceNumericIds));
+
+      if (pagosError) {
+        console.error('Invoice list payments lookup error:', pagosError);
+        return res
+          .status(500)
+          .json(
+            formatUnexpectedErrorResponse(
+              'Unexpected error while fetching invoice payment summaries.',
+              pagosError
+            )
+          );
+      }
+
+      for (const pago of pagosData ?? []) {
+        const invoiceId = coerceToNumericId(pago?.id_factura);
+
+        if (invoiceId === null) {
+          continue;
+        }
+
+        const amount = roundCurrency(toNumber(pago?.monto_pago ?? pago?.monto ?? 0, 0));
+        const accumulated = paymentTotalsByInvoice.get(invoiceId) ?? 0;
+
+        paymentTotalsByInvoice.set(invoiceId, roundCurrency(accumulated + amount));
+        paymentCountsByInvoice.set(invoiceId, (paymentCountsByInvoice.get(invoiceId) ?? 0) + 1);
+      }
+    }
+
+    const facturasConPagos = enrichedFacturas.map((factura) => {
+      const facturaId =
+        coerceToNumericId(factura?.id) ?? coerceToNumericId(factura?.factura_id);
+
+      const totalFactura = roundCurrency(
+        toNumber(
+          factura?.total ??
+            factura?.total_factura ??
+            factura?.monto_total ??
+            factura?.importe_total ??
+            factura?.gran_total ??
+            0,
+          0
+        )
+      );
+
+      const paidCandidates = [
+        factura?.pagos_resumen?.total_pagado,
+        factura?.pagos?.total_pagado,
+        factura?.pagos?.totalPagado,
+        factura?.total_pagado,
+        factura?.monto_pagado,
+        factura?.total_abonado,
+        factura?.pagado,
+        factura?.monto_total_pagado,
+      ];
+
+      let existingPaid = 0;
+
+      for (const candidate of paidCandidates) {
+        if (candidate !== undefined && candidate !== null) {
+          existingPaid = roundCurrency(toNumber(candidate, 0));
+          break;
+        }
+      }
+
+      const hasAggregatedPayments =
+        facturaId !== null && paymentTotalsByInvoice.has(facturaId);
+      const totalPagado = hasAggregatedPayments
+        ? paymentTotalsByInvoice.get(facturaId) ?? 0
+        : existingPaid;
+      const cantidadPagos = hasAggregatedPayments
+        ? paymentCountsByInvoice.get(facturaId) ?? 0
+        : 0;
+      const saldoPendiente = roundCurrency(Math.max(0, totalFactura - totalPagado));
+
+      const facturaConPagos = {
+        ...factura,
+        pagos_resumen: {
+          total_factura: totalFactura,
+          total_pagado: totalPagado,
+          saldo_pendiente: saldoPendiente,
+          cantidad_pagos: cantidadPagos,
+        },
+      };
+
+      if (facturaConPagos.total_pagado === undefined || facturaConPagos.total_pagado === null) {
+        facturaConPagos.total_pagado = totalPagado;
+      }
+
+      if (facturaConPagos.monto_pagado === undefined || facturaConPagos.monto_pagado === null) {
+        facturaConPagos.monto_pagado = totalPagado;
+      }
+
+      if (facturaConPagos.saldo_pendiente === undefined || facturaConPagos.saldo_pendiente === null) {
+        facturaConPagos.saldo_pendiente = saldoPendiente;
+      }
+
+      if (facturaConPagos.saldoPendiente === undefined || facturaConPagos.saldoPendiente === null) {
+        facturaConPagos.saldoPendiente = saldoPendiente;
+      }
+
+      return facturaConPagos;
+    });
+
     return res.json({
-      facturas: enrichedFacturas,
-      total: enrichedFacturas.length,
+      facturas: facturasConPagos,
+      total: facturasConPagos.length,
     });
   } catch (err) {
     console.error('Unhandled invoice list error:', err);
@@ -4487,6 +4612,146 @@ ordenesCompraRouter.post('/:id/procesar_pago', async (req, res) => {
 const cxcRouter = express.Router();
 
 cxcRouter.use(ensureSupabaseConfigured);
+
+cxcRouter.get('/facturas/:invoiceId/pagos', async (req, res) => {
+  const invoiceIdentifierRaw = req.params?.invoiceId ?? null;
+  const normalizedInvoiceId = normalizeIdentifier(invoiceIdentifierRaw);
+
+  if (normalizedInvoiceId === null || normalizedInvoiceId === undefined) {
+    return res.status(400).json({ message: 'El identificador de la factura es obligatorio.' });
+  }
+
+  const fetchInvoiceByColumn = async (column, value) => {
+    const { data, error } = await supabaseClient
+      .from(FACTURAS_VENTA_TABLE)
+      .select('*')
+      .eq(column, value)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+
+      throw error;
+    }
+
+    return data ?? null;
+  };
+
+  try {
+    let facturaRecord = null;
+
+    if (typeof normalizedInvoiceId === 'number') {
+      facturaRecord = await fetchInvoiceByColumn('id', normalizedInvoiceId);
+
+      if (!facturaRecord) {
+        facturaRecord = await fetchInvoiceByColumn('factura_id', normalizedInvoiceId);
+      }
+    } else {
+      facturaRecord = await fetchInvoiceByColumn('factura_id', normalizedInvoiceId);
+
+      if (!facturaRecord) {
+        facturaRecord = await fetchInvoiceByColumn('id', normalizedInvoiceId);
+      }
+    }
+
+    if (!facturaRecord) {
+      return res.status(404).json({ message: 'La factura especificada no existe.' });
+    }
+
+    const invoiceNumericId =
+      coerceToNumericId(facturaRecord?.id) ??
+      coerceToNumericId(facturaRecord?.factura_id) ??
+      coerceToNumericId(normalizedInvoiceId);
+
+    const paymentQuery = supabaseClient
+      .from(PAGOS_RECIBIDOS_TABLE)
+      .select('*')
+      .order('fecha_pago', { ascending: false })
+      .order('creado_en', { ascending: false });
+
+    if (invoiceNumericId !== null) {
+      paymentQuery.eq('id_factura', invoiceNumericId);
+    } else {
+      const fallbackInvoiceId =
+        facturaRecord?.factura_id ?? facturaRecord?.id ?? normalizedInvoiceId;
+      paymentQuery.eq('id_factura', fallbackInvoiceId);
+    }
+
+    const { data: pagosData, error: pagosError } = await paymentQuery;
+
+    if (pagosError) {
+      console.error('Customer payment detail: payments fetch error.', pagosError);
+      return res
+        .status(500)
+        .json(
+          formatUnexpectedErrorResponse(
+            'Ocurrió un error al consultar los pagos registrados de la factura.',
+            pagosError
+          )
+        );
+    }
+
+    const pagos = Array.isArray(pagosData) ? pagosData : [];
+
+    let totalPagado = 0;
+    let fechaUltimoPago = null;
+
+    for (const pago of pagos) {
+      const amount = roundCurrency(toNumber(pago?.monto_pago ?? pago?.monto ?? 0, 0));
+      totalPagado = roundCurrency(totalPagado + amount);
+
+      const pagoDateIso = parseDateToIso(pago?.fecha_pago ?? pago?.fecha ?? pago?.creado_en);
+
+      if (pagoDateIso) {
+        if (!fechaUltimoPago || pagoDateIso > fechaUltimoPago) {
+          fechaUltimoPago = pagoDateIso;
+        }
+      }
+    }
+
+    const totalFactura = roundCurrency(
+      toNumber(
+        facturaRecord?.pagos_resumen?.total_factura ??
+          facturaRecord?.total ??
+          facturaRecord?.total_factura ??
+          facturaRecord?.monto_total ??
+          facturaRecord?.importe_total ??
+          facturaRecord?.gran_total ??
+          0,
+        0
+      )
+    );
+
+    const resumen = {
+      total_factura: totalFactura,
+      total_pagado: roundCurrency(totalPagado),
+      saldo_pendiente: roundCurrency(Math.max(0, totalFactura - totalPagado)),
+      cantidad_pagos: pagos.length,
+    };
+
+    if (fechaUltimoPago) {
+      resumen.fecha_ultimo_pago = fechaUltimoPago;
+    }
+
+    return res.json({
+      factura: facturaRecord,
+      pagos,
+      resumen,
+    });
+  } catch (err) {
+    console.error('Customer payment detail: unexpected error.', err);
+    return res
+      .status(500)
+      .json(
+        formatUnexpectedErrorResponse(
+          'Ocurrió un error inesperado al consultar los pagos de la factura.',
+          err
+        )
+      );
+  }
+});
 
 cxcRouter.post('/registrar_pago', async (req, res) => {
   try {
