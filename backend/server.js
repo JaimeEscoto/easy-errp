@@ -152,6 +152,91 @@ const coerceToNumericId = (value) => {
   return null;
 };
 
+const redactSensitiveFields = (value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveFields(item));
+  }
+
+  if (typeof value !== 'object') {
+    return value;
+  }
+
+  const SENSITIVE_KEYWORDS = [
+    'password',
+    'contrasena',
+    'contraseña',
+    'token',
+    'secret',
+    'apikey',
+    'api_key',
+    'service_role_key',
+  ];
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => {
+      const normalizedKey = key.toLowerCase();
+
+      if (SENSITIVE_KEYWORDS.some((candidate) => normalizedKey.includes(candidate))) {
+        return [key, '[REDACTED]'];
+      }
+
+      return [key, redactSensitiveFields(entryValue)];
+    })
+  );
+};
+
+const safeSerializeForLog = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch (err) {
+    return '[Unable to serialize value for logging]';
+  }
+};
+
+const createRequestLogger = () => {
+  return (req, res, next) => {
+    const startTime = process.hrtime();
+    const { method } = req;
+    const originalUrl = req.originalUrl || req.url;
+
+    console.info(`[Request] ${method} ${originalUrl} - started`);
+
+    res.on('finish', () => {
+      const [seconds, nanoseconds] = process.hrtime(startTime);
+      const durationMs = seconds * 1000 + nanoseconds / 1e6;
+      const status = res.statusCode;
+      const statusMessage = res.statusMessage ? ` ${res.statusMessage}` : '';
+      const logMessage = `[Request] ${method} ${originalUrl} -> ${status}${statusMessage} (${durationMs.toFixed(
+        2
+      )} ms)`;
+
+      if (status >= 500) {
+        console.error(logMessage);
+      } else if (status >= 400) {
+        console.warn(logMessage);
+      } else {
+        console.info(logMessage);
+      }
+
+      const shouldLogBody = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+      if (shouldLogBody && req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+        const sanitizedBody = redactSensitiveFields(req.body);
+        console.debug(`[Request] ${method} ${originalUrl} payload: ${safeSerializeForLog(sanitizedBody)}`);
+      }
+
+      if (req.query && Object.keys(req.query).length > 0) {
+        console.debug(`[Request] ${method} ${originalUrl} query: ${safeSerializeForLog(req.query)}`);
+      }
+    });
+
+    next();
+  };
+};
+
 const sanitizeNumericAuditFields = (payload, fields = []) => {
   if (!payload || typeof payload !== 'object') {
     return;
@@ -1519,6 +1604,7 @@ const applyArticuloUpdateWithFallback = async ({ id, values, existingData, selec
 
 app.use(cors());
 app.use(express.json());
+app.use(createRequestLogger());
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -3046,6 +3132,8 @@ almacenesRouter.get('/', async (_req, res) => {
 
     const almacenes = Array.isArray(data) ? data : [];
 
+    console.info(`Warehouse list success: returned ${almacenes.length} warehouse(s).`);
+
     return res.json({ almacenes, total: almacenes.length, fetched_at: new Date().toISOString() });
   } catch (err) {
     console.error('Unhandled warehouse list error:', err);
@@ -3117,7 +3205,13 @@ almacenesRouter.post('/', async (req, res) => {
         .json(formatUnexpectedErrorResponse('Unexpected error while creating warehouse.', error));
     }
 
-    return res.status(201).json(data ?? cleanedPayload);
+    const createdWarehouse = data ?? cleanedPayload;
+    const identifier =
+      createdWarehouse?.id ?? createdWarehouse?.codigo ?? createdWarehouse?.nombre ?? 'unknown';
+
+    console.info(`Warehouse creation success: created warehouse ${identifier}.`);
+
+    return res.status(201).json(createdWarehouse);
   } catch (err) {
     console.error('Unhandled warehouse creation error:', err);
     return res
