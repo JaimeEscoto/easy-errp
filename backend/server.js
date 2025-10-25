@@ -2319,10 +2319,43 @@ facturasRouter.get('/', async (_req, res) => {
     const paymentCountsByInvoice = new Map();
 
     if (invoiceNumericIds.size) {
-      const { data: pagosData, error: pagosError } = await supabaseClient
-        .from(PAGOS_RECIBIDOS_TABLE)
-        .select('id_factura, monto_pago, monto')
-        .in('id_factura', Array.from(invoiceNumericIds));
+      const invoiceIdsArray = Array.from(invoiceNumericIds);
+      const paymentSelectColumns = [
+        'id_factura, monto_pago, monto',
+        'id_factura, monto_pago',
+        'id_factura, monto',
+        'id_factura',
+      ];
+
+      let pagosData = null;
+      let pagosError = null;
+
+      for (const columns of paymentSelectColumns) {
+        const { data, error } = await supabaseClient
+          .from(PAGOS_RECIBIDOS_TABLE)
+          .select(columns)
+          .in('id_factura', invoiceIdsArray);
+
+        if (!error) {
+          pagosData = data;
+          pagosError = null;
+
+          if (columns !== paymentSelectColumns[0]) {
+            console.warn(
+              `Invoice list payments lookup fallback succeeded using columns: ${columns}`
+            );
+          }
+
+          break;
+        }
+
+        if (error.code !== '42703') {
+          pagosError = error;
+          break;
+        }
+
+        pagosError = error;
+      }
 
       if (pagosError) {
         console.error('Invoice list payments lookup error:', pagosError);
