@@ -1316,7 +1316,6 @@ const buildDashboardActivities = ({
 const extractInvoiceTotalForDashboard = (record = {}) => {
   const candidates = [
     record.total,
-    record.total_factura,
     record.monto_total,
     record.totalFactura,
     record.montoTotal,
@@ -4566,7 +4565,7 @@ cxcRouter.post('/registrar_pago', async (req, res) => {
 
     const { data: invoiceData, error: invoiceError } = await supabaseClient
       .from(FACTURAS_VENTA_TABLE)
-      .select('id, id_cliente, cliente_id, tercero_id, total, estado, total_factura, monto_total')
+      .select('id, id_cliente, cliente_id, tercero_id, total, estado, monto_total')
       .eq('id', invoiceIdNormalized)
       .maybeSingle();
 
@@ -4617,11 +4616,7 @@ cxcRouter.post('/registrar_pago', async (req, res) => {
       return res.status(409).json({ message: 'La factura ya figura como pagada.' });
     }
 
-    const invoiceTotalCandidates = [
-      invoiceData.total,
-      invoiceData.total_factura,
-      invoiceData.monto_total,
-    ];
+    const invoiceTotalCandidates = [invoiceData.total, invoiceData.monto_total];
     const invoiceTotal = roundCurrency(
       invoiceTotalCandidates.reduce((acc, candidate) => acc ?? candidate, null)
     );
