@@ -1047,7 +1047,7 @@ const getFormPayload = () => {
     payload.modificado_por = adminIdValue;
 
     if (!currentArticleId) {
-      payload.creado_por = adminIdValue;
+      payload.created_by = adminIdValue;
     }
   }
 
