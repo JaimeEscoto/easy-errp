@@ -243,17 +243,166 @@
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Total
                     </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="invoice-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
               </table>
             </div>
+            <div
+              id="invoice-feedback"
+              class="hidden rounded-xl border border-transparent bg-green-50 px-4 py-3 text-sm text-green-800"
+              role="status"
+            ></div>
             <div id="invoice-empty" class="hidden px-5 py-10 text-center text-sm text-gray-500">
               Aún no se registran facturas en el sistema. Emite una nueva factura para visualizarla aquí.
             </div>
           </section>
         </div>
       </main>
+    </div>
+    <div
+      id="payment-modal-backdrop"
+      class="fixed inset-0 z-40 hidden bg-gray-900/60 backdrop-blur-sm transition-opacity"
+      aria-hidden="true"
+    ></div>
+    <div id="payment-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+      <div class="flex min-h-full items-center justify-center p-4">
+        <div class="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+          <form id="payment-form" class="space-y-6 p-6">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900">Registrar pago</h2>
+                <p class="mt-1 text-sm text-gray-500" id="payment-invoice-label">Factura —</p>
+              </div>
+              <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                id="payment-modal-close"
+                aria-label="Cerrar"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+              <dl class="grid grid-cols-2 gap-3">
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Cliente</dt>
+                  <dd id="payment-client-name" class="mt-1 font-medium text-gray-900">—</dd>
+                </div>
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Identificador</dt>
+                  <dd id="payment-client-id" class="mt-1 text-gray-700">—</dd>
+                </div>
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Total factura</dt>
+                  <dd id="payment-invoice-total" class="mt-1 font-medium text-gray-900">—</dd>
+                </div>
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Saldo pendiente</dt>
+                  <dd id="payment-invoice-balance" class="mt-1 font-medium text-blue-700">—</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div class="md:col-span-2">
+                <label for="payment-amount" class="block text-sm font-medium text-gray-700">
+                  Monto del pago
+                  <span class="text-rose-500">*</span>
+                </label>
+                <div class="mt-1">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    id="payment-amount"
+                    name="payment-amount"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label for="payment-date" class="block text-sm font-medium text-gray-700">
+                  Fecha del pago
+                  <span class="text-rose-500">*</span>
+                </label>
+                <div class="mt-1">
+                  <input
+                    type="date"
+                    id="payment-date"
+                    name="payment-date"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de pago</label>
+                <div class="mt-1">
+                  <input
+                    type="text"
+                    id="payment-method"
+                    name="payment-method"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Transferencia, efectivo, etc."
+                  />
+                </div>
+              </div>
+              <div>
+                <label for="payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
+                <div class="mt-1">
+                  <input
+                    type="text"
+                    id="payment-reference"
+                    name="payment-reference"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="No. de comprobante"
+                  />
+                </div>
+              </div>
+              <div class="md:col-span-2">
+                <label for="payment-notes" class="block text-sm font-medium text-gray-700">Notas</label>
+                <div class="mt-1">
+                  <textarea
+                    id="payment-notes"
+                    name="payment-notes"
+                    rows="3"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Comentarios adicionales sobre este pago"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+            <div
+              id="payment-error"
+              class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700"
+              role="alert"
+            ></div>
+            <div class="flex justify-end gap-3">
+              <button
+                type="button"
+                class="inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="payment-cancel"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                class="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                data-payment-submit
+              >
+                Registrar pago
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
     <script>
       const sidebar = document.getElementById('sidebar');
