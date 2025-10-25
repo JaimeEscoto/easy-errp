@@ -2337,14 +2337,12 @@ ordenesCompraRouter.post('/', async (req, res) => {
       base.producto_id ??
       base.productoId ??
       null;
-    const articuloId = coerceToNumericId(articuloIdentifierRaw);
+    const articuloId = normalizeIdentifier(articuloIdentifierRaw);
+    const hasArticulo = articuloId !== null && articuloId !== undefined;
 
-    const lineType = normalizePurchaseOrderLineType(
-      base.tipo,
-      articuloId !== null && articuloId !== undefined
-    );
+    const lineType = normalizePurchaseOrderLineType(base.tipo, hasArticulo);
 
-    if (lineType === 'Producto' && (articuloId === null || articuloId === undefined)) {
+    if (lineType === 'Producto' && !hasArticulo) {
       return res.status(400).json({
         message: `La línea ${index + 1} es de tipo Producto y requiere un artículo asociado.`,
       });
@@ -2388,7 +2386,7 @@ ordenesCompraRouter.post('/', async (req, res) => {
       total_linea: roundTo(totalLinea, 4),
     };
 
-    if (articuloId !== null && articuloId !== undefined && lineType === 'Producto') {
+    if (hasArticulo && lineType === 'Producto') {
       normalizedLine.id_articulo = articuloId;
     }
 
