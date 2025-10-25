@@ -890,6 +890,507 @@ const calculateInvoiceTotals = (lines = []) => {
   );
 };
 
+const coerceToNumberOrNull = (value) => {
+  const normalized = toNumber(value, null);
+
+  if (normalized === null || Number.isNaN(normalized)) {
+    return null;
+  }
+
+  return Number(normalized);
+};
+
+const parseRecordDate = (record = {}, columns = []) => {
+  for (const column of columns) {
+    const iso = parseDateToIso(record?.[column]);
+
+    if (!iso) {
+      continue;
+    }
+
+    const parsed = new Date(iso);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const startOfUtcMonth = (date = new Date()) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0));
+
+const addUtcMonths = (date, months) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1, 0, 0, 0, 0));
+
+const sumValuesForRange = (
+  records = [],
+  { dateColumns = [], valueExtractor = () => null, rangeStart = null, rangeEnd = null }
+) => {
+  let total = 0;
+
+  for (const record of records) {
+    const recordDate = parseRecordDate(record, dateColumns);
+
+    if (!recordDate) {
+      continue;
+    }
+
+    if (rangeStart && recordDate < rangeStart) {
+      continue;
+    }
+
+    if (rangeEnd && recordDate >= rangeEnd) {
+      continue;
+    }
+
+    const value = coerceToNumberOrNull(valueExtractor(record));
+
+    if (value === null) {
+      continue;
+    }
+
+    total += value;
+  }
+
+  return total;
+};
+
+const computeMonthlySummary = (
+  records = [],
+  { dateColumns = [], valueExtractor = () => null, now = new Date() } = {}
+) => {
+  const currentMonthStart = startOfUtcMonth(now);
+  const nextMonthStart = addUtcMonths(currentMonthStart, 1);
+  const previousMonthStart = addUtcMonths(currentMonthStart, -1);
+
+  const currentTotalRaw = sumValuesForRange(records, {
+    dateColumns,
+    valueExtractor,
+    rangeStart: currentMonthStart,
+    rangeEnd: nextMonthStart,
+  });
+
+  const previousTotalRaw = sumValuesForRange(records, {
+    dateColumns,
+    valueExtractor,
+    rangeStart: previousMonthStart,
+    rangeEnd: currentMonthStart,
+  });
+
+  const currentTotal = roundCurrency(currentTotalRaw);
+  const previousTotal = roundCurrency(previousTotalRaw);
+  const difference = roundCurrency(currentTotalRaw - previousTotalRaw);
+
+  const percentageChange =
+    previousTotalRaw > 0
+      ? Math.round(((currentTotalRaw - previousTotalRaw) / previousTotalRaw) * 1000) / 10
+      : null;
+
+  return {
+    total: currentTotal,
+    totalAnterior: previousTotal,
+    diferencia: difference,
+    variacionPorcentaje: percentageChange,
+    periodo: {
+      inicio: currentMonthStart.toISOString(),
+      fin: nextMonthStart.toISOString(),
+    },
+  };
+};
+
+const interpretArticuloActiveState = (article = {}) => {
+  const candidates = [
+    article.activo,
+    article.active,
+    article.is_active,
+    article.estado,
+    article.status,
+    article.habilitado,
+    article.enabled,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeBoolean(candidate);
+
+    if (normalized !== null) {
+      return normalized;
+    }
+
+    if (typeof candidate === 'string') {
+      const lowered = candidate.trim().toLowerCase();
+
+      if (['activo', 'activa', 'active', 'habilitado'].includes(lowered)) {
+        return true;
+      }
+
+      if (['inactivo', 'inactiva', 'inactive', 'deshabilitado', 'deshabilitada'].includes(lowered)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
+
+const getRecordActorLabel = (record = {}) => {
+  const idCandidates = [
+    record.modificado_por,
+    record.creado_por,
+    record.actor_id,
+    record.admin_id,
+    record.user_id,
+    record.usuario_id,
+  ];
+
+  let actorId = null;
+
+  for (const candidate of idCandidates) {
+    const normalized = normalizeActorId(candidate);
+
+    if (normalized !== null && normalized !== undefined) {
+      actorId = normalized;
+      break;
+    }
+  }
+
+  const nameCandidates = [
+    record.modificado_por_nombre,
+    record.creado_por_nombre,
+    record.actor_nombre,
+    record.actor_name,
+    record.admin_name,
+    record.usuario,
+    record.user_name,
+  ];
+
+  let actorName = null;
+
+  for (const candidate of nameCandidates) {
+    const normalized = normalizeActorName(candidate);
+
+    if (normalized) {
+      actorName = normalized;
+      break;
+    }
+  }
+
+  return formatActorLabel(actorId, actorName);
+};
+
+const pickRecordIdentifier = (record = {}, keys = [], fallbackLabel = '') => {
+  for (const key of keys) {
+    const value = record?.[key];
+
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+
+      if (trimmed) {
+        return trimmed;
+      }
+
+      continue;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  if (fallbackLabel) {
+    if (record?.id !== undefined && record?.id !== null) {
+      return `${fallbackLabel} ${record.id}`;
+    }
+
+    return fallbackLabel;
+  }
+
+  return '—';
+};
+
+const buildDashboardActivities = ({
+  facturas = [],
+  ordenes = [],
+  articulos = [],
+  terceros = [],
+} = {}) => {
+  const activities = [];
+
+  const addActivity = (activity) => {
+    if (!activity || !activity.fecha) {
+      return;
+    }
+
+    activities.push(activity);
+  };
+
+  facturas.forEach((factura) => {
+    const fecha =
+      parseRecordDate(factura, [
+        'modificado_en',
+        'fecha',
+        'fecha_emision',
+        'fecha_factura',
+        'creado_en',
+        'creado_el',
+        'created_at',
+      ]) || parseRecordDate(factura, ['updated_at']);
+
+    if (!fecha) {
+      return;
+    }
+
+    const status =
+      typeof factura.estado === 'string' ? factura.estado.trim().toLowerCase() : '';
+
+    const accion = status === 'anulada' ? 'Factura anulada' : 'Factura emitida';
+    const detalle = pickRecordIdentifier(
+      factura,
+      ['numero', 'num_factura', 'consecutivo', 'codigo', 'referencia', 'id', 'factura_id'],
+      'Factura'
+    );
+
+    addActivity({
+      fecha: fecha.toISOString(),
+      usuario: getRecordActorLabel(factura) ?? '—',
+      modulo: 'Ventas',
+      accion,
+      detalle,
+    });
+  });
+
+  ordenes.forEach((orden) => {
+    const fecha =
+      parseRecordDate(orden, [
+        'modificado_en',
+        'fecha_orden',
+        'fecha',
+        'creado_en',
+        'creado_el',
+        'created_at',
+      ]) || parseRecordDate(orden, ['updated_at']);
+
+    if (!fecha) {
+      return;
+    }
+
+    const detalle = pickRecordIdentifier(
+      orden,
+      ['numero', 'numero_orden', 'codigo', 'orden', 'referencia', 'id', 'orden_id'],
+      'Orden'
+    );
+
+    const accion = 'Orden registrada';
+
+    addActivity({
+      fecha: fecha.toISOString(),
+      usuario: getRecordActorLabel(orden) ?? '—',
+      modulo: 'Compras',
+      accion,
+      detalle,
+    });
+  });
+
+  articulos.forEach((articulo) => {
+    const fecha =
+      parseRecordDate(articulo, ['modificado_en', 'creado_en', 'created_at', 'updated_at']) ?? null;
+
+    if (!fecha) {
+      return;
+    }
+
+    const createdIso = parseDateToIso(articulo.creado_en ?? articulo.created_at);
+    const modifiedIso = parseDateToIso(articulo.modificado_en ?? articulo.updated_at);
+
+    let accion = 'Artículo registrado';
+
+    if (createdIso && modifiedIso && createdIso !== modifiedIso) {
+      accion = 'Artículo actualizado';
+    }
+
+    const detalle = pickRecordIdentifier(
+      articulo,
+      ['codigo', 'nombre', 'descripcion_corta', 'descripcion', 'id'],
+      'Artículo'
+    );
+
+    addActivity({
+      fecha: fecha.toISOString(),
+      usuario: getRecordActorLabel(articulo) ?? '—',
+      modulo: 'Maestros',
+      accion,
+      detalle,
+    });
+  });
+
+  terceros.forEach((tercero) => {
+    const fecha =
+      parseRecordDate(tercero, ['modificado_en', 'creado_en', 'created_at', 'updated_at']) ?? null;
+
+    if (!fecha) {
+      return;
+    }
+
+    const createdIso = parseDateToIso(tercero.creado_en ?? tercero.created_at);
+    const modifiedIso = parseDateToIso(tercero.modificado_en ?? tercero.updated_at);
+
+    let accion = 'Tercero registrado';
+
+    if (createdIso && modifiedIso && createdIso !== modifiedIso) {
+      accion = 'Tercero actualizado';
+    }
+
+    const detalle = pickRecordIdentifier(
+      tercero,
+      [
+        'nombre_comercial',
+        'razon_social',
+        'nombre',
+        'identificacion_fiscal',
+        'identificacion',
+        'nit',
+        'id',
+      ],
+      'Tercero'
+    );
+
+    addActivity({
+      fecha: fecha.toISOString(),
+      usuario: getRecordActorLabel(tercero) ?? '—',
+      modulo: 'Maestros',
+      accion,
+      detalle,
+    });
+  });
+
+  activities.sort((a, b) => {
+    const dateA = new Date(a.fecha);
+    const dateB = new Date(b.fecha);
+
+    return dateB - dateA;
+  });
+
+  return activities.slice(0, 8);
+};
+
+const extractInvoiceTotalForDashboard = (record = {}) => {
+  const candidates = [
+    record.total,
+    record.total_factura,
+    record.monto_total,
+    record.totalFactura,
+    record.montoTotal,
+    record.total_general,
+    record.totalGeneral,
+  ];
+
+  for (const candidate of candidates) {
+    const numeric = coerceToNumberOrNull(candidate);
+
+    if (numeric !== null) {
+      return numeric;
+    }
+  }
+
+  const subtotal = coerceToNumberOrNull(
+    record.sub_total ?? record.subtotal ?? record.subTotal ?? record.base ?? record.base_imponible
+  );
+  const impuestos = coerceToNumberOrNull(
+    record.total_impuestos ?? record.totalImpuestos ?? record.impuestos ?? record.tax ?? record.taxes
+  );
+
+  if (subtotal !== null || impuestos !== null) {
+    return (subtotal ?? 0) + (impuestos ?? 0);
+  }
+
+  return null;
+};
+
+const extractPurchaseOrderTotalForDashboard = (record = {}) => {
+  const candidates = [
+    record.total,
+    record.monto_total,
+    record.total_orden,
+    record.totalOrden,
+    record.total_general,
+    record.totalGeneral,
+  ];
+
+  for (const candidate of candidates) {
+    const numeric = coerceToNumberOrNull(candidate);
+
+    if (numeric !== null) {
+      return numeric;
+    }
+  }
+
+  const subtotal = coerceToNumberOrNull(record.sub_total ?? record.subtotal ?? record.subTotal);
+  const impuestos = coerceToNumberOrNull(
+    record.total_impuestos ?? record.totalImpuestos ?? record.impuestos ?? record.tax ?? record.taxes
+  );
+
+  if (subtotal !== null || impuestos !== null) {
+    return (subtotal ?? 0) + (impuestos ?? 0);
+  }
+
+  return null;
+};
+
+const computeArticlesSummary = (records = []) => {
+  let total = 0;
+  let activos = 0;
+  let inactivos = 0;
+
+  for (const record of records) {
+    total += 1;
+
+    if (interpretArticuloActiveState(record)) {
+      activos += 1;
+    } else {
+      inactivos += 1;
+    }
+  }
+
+  return { total, activos, inactivos };
+};
+
+const DEFAULT_DASHBOARD_CURRENCY = process.env.DEFAULT_CURRENCY || 'USD';
+
+const fetchTableData = async (table, { limit = 500 } = {}) => {
+  try {
+    let query = supabaseClient.from(table).select('*');
+
+    if (limit !== null && Number.isFinite(limit)) {
+      query = query.limit(limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      if (error.code === '42P01') {
+        console.warn(`Dashboard summary warning: table ${table} is not available.`);
+        return [];
+      }
+
+      throw error;
+    }
+
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    if (err?.code === '42P01') {
+      console.warn(`Dashboard summary warning: table ${table} is not available.`);
+      return [];
+    }
+
+    throw err;
+  }
+};
+
 const logSupabaseMisconfiguration = () => {
   const missingList = missingEnvVars.length ? missingEnvVars.join(', ') : 'unknown';
   console.error(
@@ -1002,6 +1503,54 @@ const ensureSupabaseConfigured = (_req, res, next) => {
 
   next();
 };
+
+const dashboardRouter = express.Router();
+
+dashboardRouter.use(ensureSupabaseConfigured);
+
+dashboardRouter.get('/resumen', async (_req, res) => {
+  try {
+    const [facturas, ordenes, articulos, terceros] = await Promise.all([
+      fetchTableData(FACTURAS_VENTA_TABLE),
+      fetchTableData(ORDENES_COMPRA_TABLE),
+      fetchTableData(ARTICULOS_TABLE),
+      fetchTableData(TERCEROS_TABLE),
+    ]);
+
+    const now = new Date();
+
+    const ingresos = computeMonthlySummary(facturas, {
+      dateColumns: ['fecha', 'fecha_emision', 'fecha_factura', 'creado_en', 'creado_el', 'created_at'],
+      valueExtractor: extractInvoiceTotalForDashboard,
+      now,
+    });
+
+    const gastos = computeMonthlySummary(ordenes, {
+      dateColumns: ['fecha_orden', 'fecha', 'creado_en', 'creado_el', 'created_at'],
+      valueExtractor: extractPurchaseOrderTotalForDashboard,
+      now,
+    });
+
+    const articulosResumen = computeArticlesSummary(articulos);
+    const actividades = buildDashboardActivities({ facturas, ordenes, articulos, terceros });
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      currency: DEFAULT_DASHBOARD_CURRENCY,
+      resumen: {
+        ingresos,
+        gastos,
+        articulos: articulosResumen,
+      },
+      actividades,
+    });
+  } catch (err) {
+    console.error('Dashboard summary error:', err);
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while building dashboard summary.', err));
+  }
+});
 
 const tercerosRouter = express.Router();
 
@@ -3190,6 +3739,7 @@ cxcRouter.post('/registrar_pago', async (req, res) => {
   }
 });
 
+app.use('/api/dashboard', dashboardRouter);
 app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
 app.use('/api/facturas', facturasRouter);

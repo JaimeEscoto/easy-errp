@@ -113,8 +113,16 @@
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ordenes-compra.html">
+                <a
+                  class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white"
+                  href="transacciones-ordenes-compra-registradas.html"
+                >
                   Órdenes de Compra
+                </a>
+              </li>
+              <li>
+                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ordenes-compra.html">
+                  Registrar Orden de Compra
                 </a>
               </li>
               <li>
@@ -158,6 +166,11 @@
             <span>Octubre 2025</span>
           </div>
         </div>
+        <div
+          class="mb-6 hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          role="alert"
+          data-dashboard-feedback
+        ></div>
         <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
             <div class="mb-3 flex items-center justify-between">
@@ -168,8 +181,8 @@
                 <h3 class="text-sm font-medium text-gray-700">Ingresos del Mes Actual</h3>
               </div>
             </div>
-            <p class="text-2xl font-semibold tracking-tight text-gray-900">$45,320 USD</p>
-            <p class="mt-1 text-xs text-gray-500">+8.2% vs. mes anterior</p>
+            <p class="text-2xl font-semibold tracking-tight text-gray-900" data-dashboard-income-total>—</p>
+            <p class="mt-1 text-xs text-gray-500" data-dashboard-income-delta>Sin datos comparativos</p>
           </article>
           <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
             <div class="mb-3 flex items-center justify-between">
@@ -180,8 +193,8 @@
                 <h3 class="text-sm font-medium text-gray-700">Gastos del Mes Actual</h3>
               </div>
             </div>
-            <p class="text-2xl font-semibold tracking-tight text-gray-900">$28,450 USD</p>
-            <p class="mt-1 text-xs text-gray-500">+3.1% vs. mes anterior</p>
+            <p class="text-2xl font-semibold tracking-tight text-gray-900" data-dashboard-expense-total>—</p>
+            <p class="mt-1 text-xs text-gray-500" data-dashboard-expense-delta>Sin datos comparativos</p>
           </article>
           <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
             <div class="mb-3 flex items-center justify-between">
@@ -192,8 +205,8 @@
                 <h3 class="text-sm font-medium text-gray-700">Total de Artículos en Catálogo</h3>
               </div>
             </div>
-            <p class="text-2xl font-semibold tracking-tight text-gray-900">1,240</p>
-            <p class="mt-1 text-xs text-gray-500">Activos: 1,180 · Inactivos: 60</p>
+            <p class="text-2xl font-semibold tracking-tight text-gray-900" data-dashboard-articles-total>—</p>
+            <p class="mt-1 text-xs text-gray-500" data-dashboard-articles-breakdown>Activos: — · Inactivos: —</p>
           </article>
         </section>
         <section class="mt-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -214,27 +227,11 @@
                   <th class="px-3 py-2">Detalle</th>
                 </tr>
               </thead>
-              <tbody class="divide-y">
-                <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 text-gray-700">2025-10-18</td>
-                  <td class="px-3 py-2">Juan Pérez</td>
-                  <td class="px-3 py-2">Ventas</td>
-                  <td class="px-3 py-2">Factura creada</td>
-                  <td class="px-3 py-2 text-blue-700">FV-000213</td>
-                </tr>
-                <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 text-gray-700">2025-10-18</td>
-                  <td class="px-3 py-2">Ana López</td>
-                  <td class="px-3 py-2">Compras</td>
-                  <td class="px-3 py-2">Factura aprobada</td>
-                  <td class="px-3 py-2 text-blue-700">FC-000087</td>
-                </tr>
-                <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 text-gray-700">2025-10-17</td>
-                  <td class="px-3 py-2">Juan Pérez</td>
-                  <td class="px-3 py-2">Maestros</td>
-                  <td class="px-3 py-2">Artículo actualizado</td>
-                  <td class="px-3 py-2 text-blue-700">SKU-ALF-0098</td>
+              <tbody class="divide-y" data-dashboard-activities>
+                <tr data-dashboard-activities-empty>
+                  <td class="px-3 py-6 text-center text-sm text-gray-500" colspan="5">
+                    No hay actividades recientes registradas.
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -270,5 +267,6 @@
     <script src="env.js"></script>
     <script src="config.js"></script>
     <script type="module" src="scripts/protected-page.js"></script>
+    <script type="module" src="scripts/dashboard.js"></script>
   </body>
 </html>
