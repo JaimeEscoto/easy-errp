@@ -2017,7 +2017,129 @@ articulosRouter.get('/', async (_req, res) => {
         .json(formatUnexpectedErrorResponse('Unexpected error while fetching articulos.', error));
     }
 
-    return res.json(data ?? []);
+    const articulos = Array.isArray(data) ? data : [];
+    const articuloIds = articulos
+      .map((articulo) => normalizeIdentifier(articulo?.id))
+      .filter((identifier) => identifier !== null && identifier !== undefined);
+
+    const inventoryByArticle = new Map();
+
+    if (articuloIds.length) {
+      const { data: inventoryData, error: inventoryError } = await supabaseClient
+        .from(INVENTARIO_ARTICULOS_TABLE)
+        .select(
+          'articulo_id, almacen_id, existencia, reservado, actualizado_en, ' +
+            'almacenes:almacen_id(id, codigo, nombre, ubicacion)'
+        )
+        .in('articulo_id', articuloIds);
+
+      if (inventoryError) {
+        if (inventoryError.code === '42P01') {
+          console.warn(
+            'List articulos warning: inventario_articulos table is not available; inventory summary will be omitted.'
+          );
+        } else {
+          console.error('List articulos inventory error:', inventoryError);
+          return res
+            .status(500)
+            .json(
+              formatUnexpectedErrorResponse(
+                'Unexpected error while fetching articulos inventory details.',
+                inventoryError
+              )
+            );
+        }
+      }
+
+      for (const record of Array.isArray(inventoryData) ? inventoryData : []) {
+        const articuloId = normalizeIdentifier(record?.articulo_id);
+
+        if (articuloId === null || articuloId === undefined) {
+          continue;
+        }
+
+        if (!inventoryByArticle.has(articuloId)) {
+          inventoryByArticle.set(articuloId, {
+            total_existencia: 0,
+            total_reservado: 0,
+            detalle: [],
+          });
+        }
+
+        const warehouseData = record?.almacenes ?? {};
+        const existencia = roundQuantity(record?.existencia ?? 0);
+        const reservado = roundQuantity(record?.reservado ?? 0);
+
+        const detailEntry = {
+          almacen_id: normalizeIdentifier(record?.almacen_id),
+          almacen_codigo: warehouseData?.codigo ?? null,
+          almacen_nombre: warehouseData?.nombre ?? null,
+          ubicacion: warehouseData?.ubicacion ?? null,
+          existencia,
+          reservado,
+          actualizado_en: record?.actualizado_en ?? null,
+        };
+
+        const summary = inventoryByArticle.get(articuloId);
+        summary.total_existencia = roundQuantity(summary.total_existencia + existencia);
+        summary.total_reservado = roundQuantity(summary.total_reservado + reservado);
+        summary.detalle.push(detailEntry);
+      }
+    }
+
+    const enrichedArticulos = articulos.map((articulo) => {
+      const articuloId = normalizeIdentifier(articulo?.id);
+
+      if (articuloId === null || articuloId === undefined) {
+        return articulo;
+      }
+
+      const summary = inventoryByArticle.get(articuloId);
+
+      if (!summary) {
+        return articulo;
+      }
+
+      const sortedDetail = [...summary.detalle].sort((a, b) => {
+        const aHasLocation = Boolean(a?.ubicacion && String(a.ubicacion).trim());
+        const bHasLocation = Boolean(b?.ubicacion && String(b.ubicacion).trim());
+
+        if (aHasLocation !== bHasLocation) {
+          return aHasLocation ? -1 : 1;
+        }
+
+        const aLocation = a?.ubicacion ? String(a.ubicacion).trim().toLowerCase() : '';
+        const bLocation = b?.ubicacion ? String(b.ubicacion).trim().toLowerCase() : '';
+
+        if (aLocation !== bLocation) {
+          return aLocation.localeCompare(bLocation, 'es', { sensitivity: 'base' });
+        }
+
+        const aWarehouse = a?.almacen_nombre
+          ? String(a.almacen_nombre).trim().toLowerCase()
+          : a?.almacen_codigo
+          ? String(a.almacen_codigo).trim().toLowerCase()
+          : '';
+        const bWarehouse = b?.almacen_nombre
+          ? String(b.almacen_nombre).trim().toLowerCase()
+          : b?.almacen_codigo
+          ? String(b.almacen_codigo).trim().toLowerCase()
+          : '';
+
+        return aWarehouse.localeCompare(bWarehouse, 'es', { sensitivity: 'base' });
+      });
+
+      return {
+        ...articulo,
+        inventario_resumen: {
+          total_existencia: summary.total_existencia,
+          total_reservado: summary.total_reservado,
+          detalle: sortedDetail,
+        },
+      };
+    });
+
+    return res.json(enrichedArticulos);
   } catch (err) {
     console.error('Unhandled list articulos error:', err);
     return res
@@ -3872,6 +3994,7 @@ entradasAlmacenRouter.post('/', async (req, res) => {
     }
 
     const stockAdjustments = [];
+    const articleExistenceAdjustments = [];
 
     const revertStockAdjustments = async () => {
       for (const adjustment of stockAdjustments.slice().reverse()) {
@@ -3896,6 +4019,36 @@ entradasAlmacenRouter.post('/', async (req, res) => {
           console.error('Warehouse entry revert stock error:', revertError);
         }
       }
+    };
+
+    const revertArticleExistenceAdjustments = async () => {
+      for (const adjustment of articleExistenceAdjustments.slice().reverse()) {
+        try {
+          const revertPayload = {
+            existencia: adjustment.previousExistence,
+            actualizado_en: timestamp,
+          };
+
+          applyActorAuditFields(revertPayload, actorId, { includeCreated: false });
+
+          if (actorName) {
+            revertPayload.modificado_por_nombre = actorName;
+          }
+
+          const cleanedPayload = Object.fromEntries(
+            Object.entries(revertPayload).filter(([, value]) => value !== undefined)
+          );
+
+          await supabaseClient.from(ARTICULOS_TABLE).update(cleanedPayload).eq('id', adjustment.articuloId);
+        } catch (revertError) {
+          console.error('Warehouse entry revert article existence error:', revertError);
+        }
+      }
+    };
+
+    const revertAllAdjustments = async () => {
+      await revertArticleExistenceAdjustments();
+      await revertStockAdjustments();
     };
 
     try {
@@ -3967,9 +4120,99 @@ entradasAlmacenRouter.post('/', async (req, res) => {
           stockId: updatedStockId,
         });
       }
+
+      const articleIdsToRefresh = Array.from(
+        new Set(
+          stockAdjustments
+            .map((adjustment) => normalizeIdentifier(adjustment.articuloId))
+            .filter((identifier) => identifier !== null && identifier !== undefined)
+        )
+      );
+
+      if (articleIdsToRefresh.length) {
+        const { data: existingArticles, error: existingArticlesError } = await supabaseClient
+          .from(ARTICULOS_TABLE)
+          .select('id, existencia')
+          .in('id', articleIdsToRefresh);
+
+        if (existingArticlesError) {
+          throw existingArticlesError;
+        }
+
+        const previousExistenceMap = new Map();
+
+        for (const record of Array.isArray(existingArticles) ? existingArticles : []) {
+          const recordId = normalizeIdentifier(record?.id);
+
+          if (recordId === null || recordId === undefined) {
+            continue;
+          }
+
+          previousExistenceMap.set(recordId, roundQuantity(record?.existencia ?? 0));
+        }
+
+        const { data: inventoryTotals, error: inventoryTotalsError } = await supabaseClient
+          .from(INVENTARIO_ARTICULOS_TABLE)
+          .select('articulo_id, existencia')
+          .in('articulo_id', articleIdsToRefresh);
+
+        if (inventoryTotalsError) {
+          throw inventoryTotalsError;
+        }
+
+        const totalsByArticle = new Map();
+
+        for (const record of Array.isArray(inventoryTotals) ? inventoryTotals : []) {
+          const recordArticleId = normalizeIdentifier(record?.articulo_id);
+
+          if (recordArticleId === null || recordArticleId === undefined) {
+            continue;
+          }
+
+          const previousTotal = totalsByArticle.get(recordArticleId) ?? 0;
+          const newTotal = roundQuantity(previousTotal + roundQuantity(record?.existencia ?? 0));
+          totalsByArticle.set(recordArticleId, newTotal);
+        }
+
+        for (const articleId of articleIdsToRefresh) {
+          const totalExistencia = roundQuantity(totalsByArticle.get(articleId) ?? 0);
+          const previousExistence = previousExistenceMap.has(articleId)
+            ? previousExistenceMap.get(articleId)
+            : null;
+
+          const updatePayload = {
+            existencia: totalExistencia,
+            actualizado_en: timestamp,
+          };
+
+          applyActorAuditFields(updatePayload, actorId, { includeCreated: false });
+
+          if (actorName) {
+            updatePayload.modificado_por_nombre = actorName;
+          }
+
+          const cleanedPayload = Object.fromEntries(
+            Object.entries(updatePayload).filter(([, value]) => value !== undefined)
+          );
+
+          const { error: articleUpdateError } = await supabaseClient
+            .from(ARTICULOS_TABLE)
+            .update(cleanedPayload)
+            .eq('id', articleId);
+
+          if (articleUpdateError) {
+            throw articleUpdateError;
+          }
+
+          articleExistenceAdjustments.push({
+            articuloId: articleId,
+            previousExistence,
+          });
+        }
+      }
     } catch (stockError) {
       console.error('Warehouse entry inventory update error:', stockError);
-      await revertStockAdjustments();
+      await revertAllAdjustments();
       await supabaseClient.from(LINEAS_ENTRADA_ALMACEN_TABLE).delete().eq('entrada_id', entryId);
       await supabaseClient.from(ENTRADAS_ALMACEN_TABLE).delete().eq('id', entryId);
       return res

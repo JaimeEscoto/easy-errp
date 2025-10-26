@@ -353,6 +353,116 @@ const formatNumber = (value) => {
   return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 }).format(number);
 };
 
+const getInventorySummary = (article) => {
+  if (!article || typeof article !== 'object') {
+    return null;
+  }
+
+  const summary =
+    article.inventario_resumen ??
+    article.inventory_summary ??
+    article.inventarioResumen ??
+    article.inventorySummary ??
+    null;
+
+  if (!summary || typeof summary !== 'object') {
+    return null;
+  }
+
+  const totalExistenciaRaw =
+    summary.total_existencia ?? summary.totalExistencia ?? summary.total ?? summary.total_stock ?? null;
+  const totalReservadoRaw = summary.total_reservado ?? summary.totalReservado ?? summary.reservado ?? null;
+  const detalleRaw =
+    summary.detalle ?? summary.detalles ?? summary.breakdown ?? summary.detalle_almacenes ?? summary.detalleAlmacenes ?? [];
+
+  const totalExistenciaNumber = Number(totalExistenciaRaw);
+  const totalReservadoNumber = Number(totalReservadoRaw);
+
+  const detalle = Array.isArray(detalleRaw)
+    ? detalleRaw
+        .map((item) => {
+          if (!item || typeof item !== 'object') {
+            return null;
+          }
+
+          const almacenIdCandidate =
+            item.almacen_id ??
+            item.almacenId ??
+            item.almacen ??
+            item.warehouse_id ??
+            item.warehouseId ??
+            null;
+          const almacenCodigo = item.almacen_codigo ?? item.almacenCodigo ?? item.codigo_almacen ?? null;
+          const almacenNombre = item.almacen_nombre ?? item.almacenNombre ?? item.nombre_almacen ?? null;
+          const ubicacionRaw = item.ubicacion ?? item.location ?? item.ubicacion_almacen ?? null;
+          const existenciaNumber = Number(item.existencia ?? item.cantidad ?? item.stock ?? 0);
+          const reservadoNumber = Number(item.reservado ?? item.apartado ?? 0);
+
+          let almacenId = null;
+
+          if (
+            almacenIdCandidate !== undefined &&
+            almacenIdCandidate !== null &&
+            almacenIdCandidate !== ''
+          ) {
+            const numericId = Number(almacenIdCandidate);
+            almacenId = Number.isNaN(numericId) ? String(almacenIdCandidate) : numericId;
+          }
+
+          return {
+            almacenId,
+            almacenCodigo: almacenCodigo ?? null,
+            almacenNombre: almacenNombre ?? null,
+            ubicacion:
+              typeof ubicacionRaw === 'string' ? ubicacionRaw.trim() : ubicacionRaw ?? null,
+            existencia: Number.isNaN(existenciaNumber) ? 0 : existenciaNumber,
+            reservado: Number.isNaN(reservadoNumber) ? 0 : reservadoNumber,
+          };
+        })
+        .filter((entry) => entry !== null)
+    : [];
+
+  return {
+    totalExistencia: Number.isNaN(totalExistenciaNumber) ? null : totalExistenciaNumber,
+    totalReservado: Number.isNaN(totalReservadoNumber) ? null : totalReservadoNumber,
+    detalle,
+  };
+};
+
+const getInventoryTotal = (article) => {
+  const summary = getInventorySummary(article);
+
+  if (summary && summary.totalExistencia !== null && summary.totalExistencia !== undefined) {
+    return summary.totalExistencia;
+  }
+
+  const fallbackValue = getFieldValue(article, ['existencia', 'stock', 'cantidad', 'quantity']);
+
+  if (fallbackValue === undefined || fallbackValue === null || fallbackValue === '') {
+    return null;
+  }
+
+  const number = Number(fallbackValue);
+
+  return Number.isNaN(number) ? null : number;
+};
+
+const getWarehouseDisplayLabel = (detail) => {
+  const candidates = [detail?.almacenNombre, detail?.almacenCodigo];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  if (detail?.almacenId !== null && detail?.almacenId !== undefined) {
+    return `Almacén ${detail.almacenId}`;
+  }
+
+  return 'Almacén sin nombre';
+};
+
 const formatDateTime = (value) => {
   if (!value) {
     return '—';
@@ -566,7 +676,13 @@ const renderArticles = () => {
     const codigo = getFieldValue(article, ['codigo', 'code', 'sku', 'clave']) ?? '—';
     const nombre = getFieldValue(article, ['nombre', 'name']) ?? '—';
     const precio = formatCurrency(getFieldValue(article, ['precio', 'price', 'costo', 'cost']));
-    const existencia = formatNumber(getFieldValue(article, ['existencia', 'stock', 'cantidad', 'quantity']));
+    const inventorySummary = getInventorySummary(article);
+    const rawExistenciaValue = getFieldValue(article, ['existencia', 'stock', 'cantidad', 'quantity']);
+    const totalExistencia = getInventoryTotal(article);
+    const existencia =
+      totalExistencia === null || totalExistencia === undefined
+        ? formatNumber(rawExistenciaValue)
+        : formatNumber(totalExistencia);
     const activeRawValue = getArticleStateRawValue(article);
     const activeState =
       activeRawValue === undefined || activeRawValue === null || activeRawValue === ''
@@ -617,7 +733,7 @@ const renderArticles = () => {
       <td class="px-4 py-3 text-sm font-medium text-gray-900">${codigo}</td>
       <td class="px-4 py-3 text-sm text-gray-700">${nombre}</td>
       <td class="px-4 py-3 text-sm text-gray-700">${precio}</td>
-      <td class="px-4 py-3 text-sm text-gray-700">${existencia}</td>
+      <td class="px-4 py-3 text-sm text-gray-700" data-existencia-cell></td>
       <td class="px-4 py-3 text-sm text-gray-700">
         <span class="sr-only">${estadoConfig.label}</span>
       </td>
@@ -664,6 +780,58 @@ const renderArticles = () => {
 
     const estadoCell = row.children[4];
     estadoCell.appendChild(estadoBadge);
+    const existenciaCell = row.querySelector('[data-existencia-cell]');
+
+    if (existenciaCell) {
+      existenciaCell.innerHTML = '';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex flex-col gap-1';
+
+      const totalLabel = document.createElement('span');
+      totalLabel.className = 'text-sm font-medium text-gray-800';
+      totalLabel.textContent = existencia;
+      wrapper.appendChild(totalLabel);
+
+      if (inventorySummary) {
+        const breakdown = document.createElement('div');
+        breakdown.className = 'space-y-1 text-xs text-gray-500';
+
+        if (inventorySummary.detalle.length) {
+          inventorySummary.detalle.forEach((detail) => {
+            const hasLocation = Boolean(detail?.ubicacion && String(detail.ubicacion).trim());
+            const line = document.createElement('div');
+            line.className = 'flex flex-wrap items-center justify-between gap-2';
+
+            const label = document.createElement('span');
+            label.className = hasLocation
+              ? 'font-medium text-gray-600'
+              : 'font-medium text-amber-700';
+            const warehouseLabel = getWarehouseDisplayLabel(detail);
+            label.textContent = hasLocation
+              ? `${detail.ubicacion} · ${warehouseLabel}`
+              : `${warehouseLabel} · Sin ubicación`;
+
+            const quantity = document.createElement('span');
+            quantity.className = 'text-gray-500';
+            quantity.textContent = `${formatNumber(detail.existencia ?? 0)} u`;
+
+            line.appendChild(label);
+            line.appendChild(quantity);
+            breakdown.appendChild(line);
+          });
+        } else {
+          const emptyLabel = document.createElement('span');
+          emptyLabel.className = 'text-gray-400';
+          emptyLabel.textContent = 'Sin registros de inventario.';
+          breakdown.appendChild(emptyLabel);
+        }
+
+        wrapper.appendChild(breakdown);
+      }
+
+      existenciaCell.appendChild(wrapper);
+    }
     fragment.appendChild(row);
   });
 
@@ -782,12 +950,18 @@ const openModal = ({ mode, article }) => {
     fieldPrecio.value = '';
   }
 
-  const existenciaValue = getFieldValue(article, ['existencia', 'stock', 'cantidad', 'quantity']);
-  if (existenciaValue !== undefined && existenciaValue !== null && existenciaValue !== '') {
-    const existenciaNumber = Number(existenciaValue);
+  const existenciaSummaryValue = getInventoryTotal(article);
+  if (existenciaSummaryValue !== null && existenciaSummaryValue !== undefined) {
+    const existenciaNumber = Number(existenciaSummaryValue);
     fieldExistencia.value = Number.isNaN(existenciaNumber) ? '' : existenciaNumber;
   } else {
-    fieldExistencia.value = '';
+    const existenciaValue = getFieldValue(article, ['existencia', 'stock', 'cantidad', 'quantity']);
+    if (existenciaValue !== undefined && existenciaValue !== null && existenciaValue !== '') {
+      const existenciaNumber = Number(existenciaValue);
+      fieldExistencia.value = Number.isNaN(existenciaNumber) ? '' : existenciaNumber;
+    } else {
+      fieldExistencia.value = '';
+    }
   }
 
   fieldUnidad.value = getFieldValue(article, ['unidad', 'unidad_medida', 'unit']) ?? '';
