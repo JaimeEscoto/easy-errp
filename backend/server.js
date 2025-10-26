@@ -47,6 +47,84 @@ const TERCEROS_LOG_TABLE_CANDIDATES = [
   'terceros_history',
 ];
 
+const PURCHASE_ORDER_NUMBER_PREFIX = process.env.PURCHASE_ORDER_NUMBER_PREFIX ?? 'OC-';
+const PURCHASE_ORDER_NUMBER_PADDING = (() => {
+  const parsed = Number.parseInt(process.env.PURCHASE_ORDER_NUMBER_PADDING ?? '', 10);
+
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return 5;
+})();
+
+const extractTrailingDigits = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const matches = String(value)
+    .split(/[^0-9]+/)
+    .filter((segment) => segment)
+    .map((segment) => Number.parseInt(segment, 10))
+    .filter((segment) => Number.isFinite(segment));
+
+  if (!matches.length) {
+    return null;
+  }
+
+  return matches[matches.length - 1];
+};
+
+const formatPurchaseOrderNumber = (sequence) => {
+  const numeric = Number(sequence);
+
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return `${PURCHASE_ORDER_NUMBER_PREFIX}${String(1).padStart(PURCHASE_ORDER_NUMBER_PADDING, '0')}`;
+  }
+
+  const padded = String(Math.trunc(numeric)).padStart(PURCHASE_ORDER_NUMBER_PADDING, '0');
+
+  return `${PURCHASE_ORDER_NUMBER_PREFIX}${padded}`;
+};
+
+const fetchLatestPurchaseOrderSequence = async () => {
+  const { data, error } = await supabaseClient
+    .from(ORDENES_COMPRA_TABLE)
+    .select('numero_orden')
+    .not('numero_orden', 'is', null)
+    .order('creado_en', { ascending: false })
+    .order('numero_orden', { ascending: false })
+    .limit(25);
+
+  if (error) {
+    if (error.code === '42P01' || error.code === '42703') {
+      return null;
+    }
+
+    throw error;
+  }
+
+  const records = Array.isArray(data) ? data : data ? [data] : [];
+
+  for (const record of records) {
+    const sequence = extractTrailingDigits(record?.numero_orden);
+
+    if (sequence !== null && sequence !== undefined) {
+      return sequence;
+    }
+  }
+
+  return null;
+};
+
+const generatePurchaseOrderNumber = async () => {
+  const latestSequence = await fetchLatestPurchaseOrderSequence();
+  const nextSequence = Number.isFinite(latestSequence) ? latestSequence + 1 : 1;
+
+  return formatPurchaseOrderNumber(nextSequence);
+};
+
 const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') {
     return value;
@@ -3470,6 +3548,38 @@ entradasAlmacenRouter.get('/', async (_req, res) => {
     }
 
     const entradas = Array.isArray(entriesData) ? entriesData : [];
+    const orderIds = entradas
+      .map((entry) =>
+        getRecordIdentifierKey(
+          entry?.orden_compra_id ?? entry?.orden_id ?? entry?.order_id ?? entry?.ordenId ?? entry?.orderId
+        )
+      )
+      .filter((identifier) => identifier !== null && identifier !== undefined);
+
+    const uniqueOrderIds = Array.from(new Set(orderIds));
+    const ordersById = new Map();
+
+    if (uniqueOrderIds.length) {
+      const { data: ordersData, error: ordersError } = await supabaseClient
+        .from(ORDENES_COMPRA_TABLE)
+        .select('id, numero_orden')
+        .in('id', uniqueOrderIds);
+
+      if (ordersError) {
+        if (ordersError.code !== '42P01' && ordersError.code !== '42703') {
+          throw ordersError;
+        }
+      } else if (Array.isArray(ordersData)) {
+        for (const orderRecord of ordersData) {
+          const key = getRecordIdentifierKey(orderRecord?.id);
+
+          if (key) {
+            ordersById.set(key, orderRecord);
+          }
+        }
+      }
+    }
+
     const entradaIds = entradas
       .map((entry) => normalizeIdentifier(entry?.id))
       .filter((identifier) => identifier !== null && identifier !== undefined);
@@ -3509,6 +3619,12 @@ entradasAlmacenRouter.get('/', async (_req, res) => {
 
     const enrichedEntries = entradas.map((entry) => {
       const entryId = getRecordIdentifierKey(entry?.id);
+      const relatedOrderId = getRecordIdentifierKey(
+        entry?.orden_compra_id ?? entry?.orden_id ?? entry?.order_id ?? entry?.ordenId ?? entry?.orderId
+      );
+      const relatedOrder = relatedOrderId ? ordersById.get(relatedOrderId) ?? null : null;
+      const orderNumber =
+        relatedOrder?.numero_orden ?? entry?.orden_compra_numero ?? entry?.numero_orden ?? entry?.numeroOrden ?? null;
       const relatedLines = entryId ? linesByEntry.get(entryId) ?? [] : [];
       const totalArticulos = relatedLines.length;
       const totalCantidad = relatedLines.reduce((acc, line) => {
@@ -3521,6 +3637,8 @@ entradasAlmacenRouter.get('/', async (_req, res) => {
 
       return {
         ...entry,
+        numero_orden: orderNumber ?? entry?.numero_orden ?? null,
+        orden_compra_numero: orderNumber ?? entry?.orden_compra_numero ?? null,
         total_lineas: totalArticulos,
         total_cantidad: totalCantidad,
       };
@@ -3893,9 +4011,21 @@ entradasAlmacenRouter.post('/', async (req, res) => {
       console.error('Warehouse entry order status update error:', orderUpdateError);
     }
 
+    const entryOrderNumber =
+      updatedDetail.order?.numero_orden ??
+      entryData?.numero_orden ??
+      entryData?.orden_compra_numero ??
+      null;
+
+    const enrichedEntryData = {
+      ...entryData,
+      numero_orden: entryOrderNumber ?? entryData?.numero_orden ?? null,
+      orden_compra_numero: entryOrderNumber ?? entryData?.orden_compra_numero ?? null,
+    };
+
     return res.status(201).json({
       message: 'Entrada de almacén registrada correctamente.',
-      entrada: entryData,
+      entrada: enrichedEntryData,
       lineas: entryLinesData ?? [],
       orden: updatedDetail.order,
       resumen: updatedDetail.resumen,
@@ -4312,6 +4442,22 @@ ordenesCompraRouter.post('/', async (req, res) => {
   const actorName = extractActorName(req, payload);
   const timestamp = new Date().toISOString();
 
+  let numeroOrden =
+    typeof payload.numero_orden === 'string' && payload.numero_orden.trim()
+      ? payload.numero_orden.trim()
+      : null;
+
+  if (!numeroOrden) {
+    try {
+      numeroOrden = await generatePurchaseOrderNumber();
+    } catch (sequenceError) {
+      console.error('Purchase order creation: unable to generate sequential number.', sequenceError);
+      return res.status(500).json({
+        message: 'No fue posible generar el número correlativo de la orden de compra.',
+      });
+    }
+  }
+
   const headerPayload = {
     id_proveedor: supplierId,
     estado:
@@ -4324,6 +4470,10 @@ ordenesCompraRouter.post('/', async (req, res) => {
     creado_en: timestamp,
     modificado_en: timestamp,
   };
+
+  if (numeroOrden) {
+    headerPayload.numero_orden = numeroOrden;
+  }
 
   const fechaOrden =
     typeof payload.fecha_orden === 'string' && payload.fecha_orden.trim()
@@ -4383,16 +4533,47 @@ ordenesCompraRouter.post('/', async (req, res) => {
     headerPayload.modificado_por_nombre = headerPayload.modificado_por_nombre ?? actorName;
   }
 
-  const cleanedHeaderPayload = Object.fromEntries(
-    Object.entries(headerPayload).filter(([, value]) => value !== undefined)
-  );
+  let cleanedHeaderPayload = {};
+  let ordenData = null;
+  let ordenError = null;
+  let insertAttempts = 0;
 
   try {
-    const { data: ordenData, error: ordenError } = await supabaseClient
-      .from(ORDENES_COMPRA_TABLE)
-      .insert([cleanedHeaderPayload])
-      .select()
-      .maybeSingle();
+    while (insertAttempts < 3) {
+      insertAttempts += 1;
+      cleanedHeaderPayload = Object.fromEntries(
+        Object.entries(headerPayload).filter(([, value]) => value !== undefined)
+      );
+
+      const { data, error } = await supabaseClient
+        .from(ORDENES_COMPRA_TABLE)
+        .insert([cleanedHeaderPayload])
+        .select()
+        .maybeSingle();
+
+      ordenData = data ?? null;
+      ordenError = error ?? null;
+
+      if (!ordenError) {
+        break;
+      }
+
+      const errorPayload = `${ordenError.message ?? ''} ${ordenError.details ?? ''} ${ordenError.hint ?? ''}`;
+      const duplicateNumber =
+        ordenError.code === '23505' && errorPayload.toLowerCase().includes('numero_orden');
+
+      if (!duplicateNumber) {
+        break;
+      }
+
+      try {
+        numeroOrden = await generatePurchaseOrderNumber();
+        headerPayload.numero_orden = numeroOrden;
+      } catch (sequenceError) {
+        console.error('Purchase order creation: unable to regenerate sequential number.', sequenceError);
+        break;
+      }
+    }
 
     if (ordenError) {
       console.error('Purchase order creation: header insertion failed.', ordenError);

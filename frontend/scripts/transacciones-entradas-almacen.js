@@ -675,18 +675,33 @@ const fetchEntryHistory = async () => {
 
     for (const entry of entries) {
       const row = document.createElement('tr');
-      const orderId = entry?.orden_compra_id ?? entry?.orden_id ?? entry?.order_id ?? '—';
+      const rawOrderId =
+        entry?.orden_compra_id ?? entry?.orden_id ?? entry?.order_id ?? entry?.ordenId ?? entry?.orderId ?? null;
+      const orderId = rawOrderId !== null && rawOrderId !== undefined ? String(rawOrderId) : '—';
+      const orderNumber =
+        entry?.orden_compra_numero ?? entry?.numero_orden ?? entry?.numeroOrden ?? entry?.orden_compra_folio ?? null;
       const warehouseId = entry?.almacen_id ?? entry?.warehouse_id ?? '—';
 
       row.innerHTML = `
         <td class="px-4 py-3 text-sm text-gray-600">${formatDateTime(
           entry?.fecha_entrada ?? entry?.fecha ?? entry?.creado_en
         )}</td>
-        <td class="px-4 py-3 text-sm text-gray-700">${orderId}</td>
+        <td class="px-4 py-3 text-sm text-gray-700" data-role="order-display"></td>
         <td class="px-4 py-3 text-sm text-gray-700">${getWarehouseName(warehouseId)}</td>
         <td class="px-4 py-3 text-sm text-gray-600">${formatQuantity(entry?.total_lineas ?? 0)}</td>
         <td class="px-4 py-3 text-sm text-gray-600">${formatQuantity(entry?.total_cantidad ?? 0)}</td>
       `;
+
+      const orderCell = row.querySelector('[data-role="order-display"]');
+
+      if (orderCell) {
+        const displayValue = orderNumber ? String(orderNumber) : orderId;
+        orderCell.textContent = displayValue;
+
+        if (orderNumber && orderId && orderId !== '—' && orderNumber !== orderId) {
+          orderCell.title = `ID interno: ${orderId}`;
+        }
+      }
 
       historyTable.appendChild(row);
     }
