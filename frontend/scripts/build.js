@@ -43,7 +43,7 @@ const copyDirectoryRecursive = (sourceDir, destinationDir) => {
 };
 
 const copyFiles = () => {
-  const staticFiles = ['app.js', 'config.js', 'styles.css', 'env.js'];
+  const staticFiles = ['app.js', 'config.js', 'styles.css', 'theme.css', 'env.js'];
   const htmlFiles = fs
     .readdirSync(frontendDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.html'))
