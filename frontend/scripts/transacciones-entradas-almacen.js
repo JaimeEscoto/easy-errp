@@ -122,6 +122,124 @@ const formatDateTime = (value) => {
   return date.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
 };
 
+const shortenIdentifier = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const stringValue = String(value).trim();
+
+  if (!stringValue) {
+    return '';
+  }
+
+  if (stringValue.length <= 12) {
+    return stringValue.toUpperCase();
+  }
+
+  const prefix = stringValue.slice(0, 4).toUpperCase();
+  const suffix = stringValue.slice(-4).toUpperCase();
+
+  return `${prefix}…${suffix}`;
+};
+
+const getOrderDisplayIdentifier = (order) => {
+  const preferredIdentifier =
+    order?.folio ??
+    order?.numero_orden ??
+    order?.numero ??
+    order?.codigo ??
+    order?.code ??
+    order?.referencia ??
+    order?.reference ??
+    null;
+
+  if (preferredIdentifier) {
+    return String(preferredIdentifier);
+  }
+
+  const fallbackIdentifier =
+    order?.id ??
+    order?.orden_id ??
+    order?.order_id ??
+    order?.ordenId ??
+    order?.orderId ??
+    order?.uuid ??
+    null;
+
+  if (!fallbackIdentifier) {
+    return 'Orden sin folio';
+  }
+
+  const shortened = shortenIdentifier(fallbackIdentifier);
+
+  return shortened ? `OC-${shortened}` : 'Orden sin folio';
+};
+
+const normalizeOrderDetail = (detail) => {
+  if (!detail || typeof detail !== 'object') {
+    return {
+      order: {},
+      lines: [],
+      resumen: {},
+      entries: [],
+      entryLines: [],
+      payments: [],
+    };
+  }
+
+  const order =
+    detail.order ??
+    detail.orden ??
+    detail.purchase_order ??
+    detail.orden_compra ??
+    {};
+
+  const lines = Array.isArray(detail.lines)
+    ? detail.lines
+    : Array.isArray(detail.lineas)
+    ? detail.lineas
+    : Array.isArray(detail.order_lines)
+    ? detail.order_lines
+    : [];
+
+  const resumen = detail.resumen ?? detail.summary ?? detail.overview ?? {};
+
+  const entries = Array.isArray(detail.entries)
+    ? detail.entries
+    : Array.isArray(detail.entradas)
+    ? detail.entradas
+    : [];
+
+  const entryLines = Array.isArray(detail.entryLines)
+    ? detail.entryLines
+    : Array.isArray(detail.lineas_entrada)
+    ? detail.lineas_entrada
+    : [];
+
+  const payments = Array.isArray(detail.payments)
+    ? detail.payments
+    : Array.isArray(detail.pagos)
+    ? detail.pagos
+    : [];
+
+  return {
+    ...detail,
+    order,
+    orden: order,
+    lines,
+    lineas: lines,
+    resumen,
+    summary: resumen,
+    entries,
+    entradas: entries,
+    entryLines,
+    lineas_entrada: entryLines,
+    payments,
+    pagos: payments,
+  };
+};
+
 const state = {
   warehouses: [],
   orders: [],
@@ -215,16 +333,17 @@ const populateOrders = (orders = []) => {
 
   for (const order of orders) {
     const option = document.createElement('option');
-    const identifier =
-      order?.folio ??
-      order?.numero_orden ??
-      order?.numero ??
-      order?.codigo ??
+    const identifierValue =
       order?.id ??
       order?.orden_id ??
-      '';
+      order?.order_id ??
+      order?.ordenId ??
+      order?.orderId ??
+      order?.uuid ??
+      null;
+    const displayIdentifier = getOrderDisplayIdentifier(order);
 
-    option.value = order?.id ?? order?.orden_id ?? identifier;
+    option.value = identifierValue ? String(identifierValue) : displayIdentifier;
 
     const status = order?.estado ?? order?.status ?? 'Registrada';
     const supplierName =
@@ -238,8 +357,8 @@ const populateOrders = (orders = []) => {
       '';
 
     option.textContent = supplierName
-      ? `${identifier} · ${supplierName} · ${status}`
-      : `${identifier} · ${status}`;
+      ? `${displayIdentifier} · ${supplierName} · ${status}`
+      : `${displayIdentifier} · ${status}`;
     option.dataset.estado = status;
 
     orderSelect.appendChild(option);
@@ -253,7 +372,11 @@ const renderLines = (detail) => {
 
   linesContainer.innerHTML = '';
 
-  const lines = Array.isArray(detail?.lines) ? detail.lines : [];
+  const lines = Array.isArray(detail?.lines)
+    ? detail.lines
+    : Array.isArray(detail?.lineas)
+    ? detail.lineas
+    : [];
 
   if (!lines.length) {
     const emptyRow = document.createElement('tr');
@@ -326,9 +449,10 @@ const renderLines = (detail) => {
 };
 
 const updateSummary = (detail) => {
-  const ordered = detail?.resumen?.total_ordenado ?? 0;
-  const received = detail?.resumen?.total_recibido ?? 0;
-  const pending = detail?.resumen?.total_pendiente ?? 0;
+  const summary = detail?.resumen ?? detail?.summary ?? {};
+  const ordered = summary?.total_ordenado ?? 0;
+  const received = summary?.total_recibido ?? 0;
+  const pending = summary?.total_pendiente ?? 0;
 
   if (summaryOrdered) {
     summaryOrdered.textContent = formatQuantity(ordered);
@@ -374,7 +498,7 @@ const updateOrderSummaryHelper = (detail) => {
     return;
   }
 
-  const order = detail?.order ?? {};
+  const order = detail?.order ?? detail?.orden ?? {};
   const supplierName =
     order?.proveedor?.nombre_comercial ??
     order?.proveedor?.razon_social ??
@@ -399,8 +523,8 @@ const handleOrderChange = async () => {
     state.currentOrderId = null;
     state.currentOrderDetail = null;
     linesContainer.innerHTML = '';
-    updateSummary({});
-    updateOrderSummaryHelper({});
+    updateSummary(null);
+    updateOrderSummaryHelper(null);
     clearFormMessage();
     return;
   }
@@ -423,14 +547,15 @@ const handleOrderChange = async () => {
     }
 
     const detail = await response.json();
+    const normalizedDetail = normalizeOrderDetail(detail);
     state.currentOrderId = selectedId;
-    state.currentOrderDetail = detail;
+    state.currentOrderDetail = normalizedDetail;
 
-    renderLines(detail);
-    updateSummary(detail);
-    updateOrderSummaryHelper(detail);
+    renderLines(normalizedDetail);
+    updateSummary(normalizedDetail);
+    updateOrderSummaryHelper(normalizedDetail);
 
-    if (detail?.resumen?.total_pendiente <= 0) {
+    if ((normalizedDetail?.resumen?.total_pendiente ?? 0) <= 0) {
       showFormMessage('La orden ya fue recibida en su totalidad.', 'warning');
     } else {
       clearFormMessage();
@@ -439,8 +564,8 @@ const handleOrderChange = async () => {
     console.error('Purchase order detail error:', error);
     showFormMessage(error.message || 'No se pudo cargar el detalle de la orden.', 'error');
     linesContainer.innerHTML = '';
-    updateSummary({});
-    updateOrderSummaryHelper({});
+    updateSummary(null);
+    updateOrderSummaryHelper(null);
   }
 };
 
