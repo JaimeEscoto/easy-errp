@@ -66,80 +66,129 @@
         <nav class="flex h-full flex-col gap-2 p-3">
           <a
             href="dashboard.html"
-            class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium hover:bg-gray-800"
+            class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-gray-200 transition hover:bg-gray-800 hover:text-white"
           >
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M3 3h8v8H3V3zm10 0h8v5h-8V3zM3 13h5v8H3v-8zm7 5h11v3H10v-3zm0-7h11v5H10v-5z" />
             </svg>
             Inicio (Dashboard)
           </a>
-          <div>
+          <div class="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-2">
             <button
-              class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-800 focus:outline-none"
+              class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-indigo-100"
               disabled
             >
-              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M21 7l-9-4-9 4 9 4 9-4zm-9 6l-9-4v8l9 4 9-4v-9l-9 4z" />
-              </svg>
-              <span class="font-medium">Maestros de Datos</span>
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/40 text-indigo-100">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2a1 1 0 01.447.105l8 4A1 1 0 0121 7v10a1 1 0 01-.553.895l-8 4a1 1 0 01-.894 0l-8-4A1 1 0 013 17V7a1 1 0 01.553-.895l8-4A1 1 0 0112 2zm0 2.236L6 7.118v9.764l6 2.882 6-2.882V7.118l-6-2.882zM11 8h2v5h-2V8zm0 6h2v2h-2v-2z" />
+                </svg>
+              </span>
+              <span>Maestros de Datos</span>
             </button>
-            <ul class="mt-1 space-y-1 pl-9 text-sm text-gray-300">
+            <ul class="mt-2 space-y-1 pl-11 text-sm text-indigo-100/80">
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="maestros-articulos.html">
+                <a class="block rounded-lg px-2 py-1 hover:bg-indigo-500/40 hover:text-white" href="maestros-articulos.html">
                   Artículos
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="maestros-clientes.html">
+                <a class="block rounded-lg px-2 py-1 hover:bg-indigo-500/40 hover:text-white" href="maestros-clientes.html">
                   Clientes / Proveedores
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="maestros-almacenes.html">
+                <a class="block rounded-lg px-2 py-1 hover:bg-indigo-500/40 hover:text-white" href="maestros-almacenes.html">
                   Almacenes
                 </a>
               </li>
             </ul>
           </div>
-          <div>
+          <div class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2">
             <button
-              class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm bg-blue-600 text-white"
+              class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-amber-100"
               disabled
             >
-              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M9 2h6a2 2 0 012 2v2h3a2 2 0 012 2v3H2V8a2 2 0 012-2h3V4a2 2 0 012-2zm1 4V4h4v2h-4zM2 12h22v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6z" />
-              </svg>
-              <span class="font-medium">Transacciones</span>
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/40 text-amber-100">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M5 4a3 3 0 013-3h8a3 3 0 013 3v2h1a1 1 0 011 1v3a1 1 0 01-1 1h-1v3a3 3 0 01-3 3h-1.382l.276 1.105A1 1 0 0015.92 19H18a1 1 0 110 2H6a1 1 0 110-2h2.08a1 1 0 01.97-.895L9.327 17H8a3 3 0 01-3-3v-3H4a1 1 0 01-1-1V7a1 1 0 011-1h1V4zm2 0v2h10V4a1 1 0 00-1-1H8a1 1 0 00-1 1zm-1 6v3a1 1 0 001 1h10a1 1 0 001-1v-3H6z"
+                  />
+                </svg>
+              </span>
+              <span>Facturación</span>
             </button>
-            <ul class="mt-1 space-y-1 pl-9 text-sm text-gray-300">
+            <ul class="mt-2 space-y-1 pl-11 text-sm text-amber-100/80">
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ventas.html">
-                  Facturas de Venta
+                <a class="block rounded-lg px-2 py-1 hover:bg-amber-500/40 hover:text-white" href="transacciones-ventas.html">
+                  Crear factura de venta
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ordenes-compra-registradas.html">
-                  Órdenes de Compra
+                <a class="block rounded-lg px-2 py-1 bg-amber-500/40 text-white" href="transacciones-facturas-emitidas.html">
+                  Ver facturas emitidas
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-2">
+            <button
+              class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-emerald-100"
+              disabled
+            >
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/40 text-emerald-100">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M4 4h5l2 2h9a1 1 0 011 1v3h-2V8H6.828l-2-2H4v12h6v2H4a2 2 0 01-2-2V6a2 2 0 012-2zm14 7a1 1 0 011 1v1h3v2h-3v1a1 1 0 01-1.447.894L15 15.618V17h-5a1 1 0 01-1-1v-2a1 1 0 011-1h5v1.382l2.553-1.276A1 1 0 0118 13z"
+                  />
+                </svg>
+              </span>
+              <span>Órdenes de compra</span>
+            </button>
+            <ul class="mt-2 space-y-1 pl-11 text-sm text-emerald-100/80">
+              <li>
+                <a
+                  class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white"
+                  href="transacciones-ordenes-compra.html"
+                >
+                  Crear orden de compra
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-ordenes-compra.html">
-                  Registrar Orden de Compra
+                <a
+                  class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white"
+                  href="transacciones-ordenes-compra-registradas.html"
+                >
+                  Ver órdenes de compra
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-entradas-almacen.html">
-                  Entradas de Almacén
+                <a class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white" href="transacciones-compras.html">
+                  Pagos de órdenes de compra
                 </a>
               </li>
+            </ul>
+          </div>
+          <div class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-2">
+            <button
+              class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-sky-100"
+              disabled
+            >
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/40 text-sky-100">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M20 7h-4.586l-1.707-1.707A1 1 0 0013 5H5a3 3 0 00-3 3v10a1 1 0 001 1h6.126a6.5 6.5 0 1111.748-4.5 6.42 6.42 0 01-.305 2h.431a1 1 0 001-1V8a1 1 0 00-1-1zm-1 10h-1.035a6.52 6.52 0 01-2.149 2H19a1 1 0 001-1v-1zm-5 4a4.5 4.5 0 100-9 4.5 4.5 0 000 9zM4 18V8a1 1 0 011-1h7.586l1 1H9a1 1 0 000 2h11v3.051A6.47 6.47 0 0016.5 11 6.5 6.5 0 0010 21H5a1 1 0 01-1-1z"
+                  />
+                </svg>
+              </span>
+              <span>Recepción en almacén</span>
+            </button>
+            <ul class="mt-2 space-y-1 pl-11 text-sm text-sky-100/80">
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-gray-800 hover:text-white" href="transacciones-compras.html">
-                  Pagos de Órdenes de Compra
-                </a>
-              </li>
-              <li>
-                <a class="block rounded-lg px-2 py-1 bg-blue-600 text-white" href="transacciones-facturas-emitidas.html">
-                  Facturas Emitidas
+                <a
+                  class="block rounded-lg px-2 py-1 hover:bg-sky-500/40 hover:text-white"
+                  href="transacciones-entradas-almacen.html"
+                >
+                  Recibir órdenes en almacén
                 </a>
               </li>
             </ul>
