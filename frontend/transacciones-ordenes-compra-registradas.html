@@ -161,11 +161,6 @@
                   Ver órdenes de compra
                 </a>
               </li>
-              <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white" href="transacciones-compras.html">
-                  Pagos de órdenes de compra
-                </a>
-              </li>
             </ul>
           </div>
           <div class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-2">
@@ -217,7 +212,7 @@
             <div>
               <h1 class="text-2xl font-semibold text-gray-900">Transacciones · Órdenes de Compra registradas</h1>
               <p class="mt-2 text-sm text-gray-500">
-                Visualiza las órdenes de compra registradas, su estado y los compromisos con cada proveedor.
+                Visualiza las órdenes de compra registradas, su estado, consulta los pagos y realiza abonos cuando sea necesario.
               </p>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row">
@@ -266,7 +261,7 @@
               <div>
                 <h2 class="text-lg font-semibold text-gray-900">Historial de órdenes de compra</h2>
                 <p class="text-sm text-gray-500">
-                  Revisa los detalles clave de cada orden y verifica próximas entregas.
+                  Revisa los detalles clave de cada orden, haz clic para consultar los pagos registrados y registra nuevos abonos.
                 </p>
               </div>
               <span
@@ -310,17 +305,185 @@
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Total
                     </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Saldo pendiente
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="purchase-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
               </table>
             </div>
+            <div
+              id="purchase-feedback"
+              class="hidden rounded-xl border border-transparent bg-green-50 px-4 py-3 text-sm text-green-800"
+              role="status"
+            ></div>
             <div id="purchase-empty" class="hidden px-5 py-10 text-center text-sm text-gray-500">
               Aún no se registran órdenes de compra en el sistema. Captura una nueva orden para visualizarla aquí.
             </div>
           </section>
         </div>
       </main>
+    </div>
+    <div
+      id="purchase-payment-modal-backdrop"
+      class="fixed inset-0 z-40 hidden bg-gray-900/60 backdrop-blur-sm transition-opacity"
+      aria-hidden="true"
+    ></div>
+    <div
+      id="purchase-payment-modal"
+      class="fixed inset-0 z-50 hidden overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="flex min-h-full items-center justify-center p-4">
+        <div class="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+          <form id="purchase-payment-form" class="space-y-6 p-6">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900">Registrar pago</h2>
+                <p class="mt-1 text-sm text-gray-500" id="purchase-payment-label">Orden —</p>
+              </div>
+              <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                id="purchase-payment-modal-close"
+                aria-label="Cerrar"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+              <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Proveedor</dt>
+                  <dd class="mt-1 font-medium text-gray-900" id="purchase-payment-supplier">—</dd>
+                </div>
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Estado</dt>
+                  <dd class="mt-1 font-medium text-gray-900" id="purchase-payment-status">—</dd>
+                </div>
+                <div class="sm:col-span-2">
+                  <p class="text-xs text-gray-500" id="purchase-payment-hint"></p>
+                </div>
+              </dl>
+            </div>
+            <div class="rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-sm">
+              <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Total de la orden</dt>
+                  <dd class="mt-1 text-base font-semibold text-gray-900" id="purchase-payment-total">—</dd>
+                </div>
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Total pagado</dt>
+                  <dd class="mt-1 text-base font-semibold text-gray-900" id="purchase-payment-paid">—</dd>
+                </div>
+                <div>
+                  <dt class="text-xs uppercase tracking-wide text-gray-500">Saldo pendiente</dt>
+                  <dd class="mt-1 text-base font-semibold text-blue-700" id="purchase-payment-remaining">—</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="grid gap-4 md:grid-cols-2">
+              <div>
+                <label for="purchase-payment-amount" class="block text-sm font-medium text-gray-700">
+                  Monto del pago
+                  <span class="text-rose-500">*</span>
+                </label>
+                <div class="mt-1">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    id="purchase-payment-amount"
+                    name="purchase-payment-amount"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label for="purchase-payment-date" class="block text-sm font-medium text-gray-700">
+                  Fecha del pago
+                  <span class="text-rose-500">*</span>
+                </label>
+                <div class="mt-1">
+                  <input
+                    type="date"
+                    id="purchase-payment-date"
+                    name="purchase-payment-date"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label for="purchase-payment-method" class="block text-sm font-medium text-gray-700">Método de pago</label>
+                <div class="mt-1">
+                  <input
+                    type="text"
+                    id="purchase-payment-method"
+                    name="purchase-payment-method"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Transferencia, efectivo, etc."
+                  />
+                </div>
+              </div>
+              <div>
+                <label for="purchase-payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
+                <div class="mt-1">
+                  <input
+                    type="text"
+                    id="purchase-payment-reference"
+                    name="purchase-payment-reference"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="No. de comprobante"
+                  />
+                </div>
+              </div>
+              <div class="md:col-span-2">
+                <label for="purchase-payment-notes" class="block text-sm font-medium text-gray-700">Notas</label>
+                <div class="mt-1">
+                  <textarea
+                    id="purchase-payment-notes"
+                    name="purchase-payment-notes"
+                    rows="3"
+                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Comentarios adicionales sobre este pago"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+            <div
+              id="purchase-payment-error"
+              class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700"
+              role="alert"
+            ></div>
+            <div class="flex justify-end gap-3">
+              <button
+                type="button"
+                class="inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="purchase-payment-cancel"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                class="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                data-purchase-payment-submit
+              >
+                Registrar pago
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
     <script>
       const sidebar = document.getElementById('sidebar');
