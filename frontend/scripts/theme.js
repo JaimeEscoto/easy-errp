@@ -195,6 +195,12 @@ export const setPalette = (paletteId) => setTheme({ paletteId });
 
 export const setMode = (mode) => setTheme({ mode: mode === 'dark' ? 'dark' : 'light' });
 
+export const toggleMode = () => {
+  const current = getTheme();
+  const nextMode = current.mode === 'dark' ? 'light' : 'dark';
+  return setMode(nextMode);
+};
+
 export const initializeTheme = () => applyTheme(getTheme());
 
 export const getPaletteDefinition = (paletteId) => getPalette(paletteId);

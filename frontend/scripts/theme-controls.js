@@ -1,4 +1,4 @@
-import { getTheme, setMode, onThemeChange } from './theme.js';
+import { getTheme, onThemeChange, toggleMode } from './theme.js';
 
 const MODE_LABEL = {
   light: 'Modo: Claro',
@@ -39,10 +39,23 @@ const updateToggleButton = (button, theme) => {
 };
 
 const bindToggleButton = (button) => {
-  button.addEventListener('click', () => {
-    const current = getTheme();
-    const nextMode = current.mode === 'dark' ? 'light' : 'dark';
-    setMode(nextMode);
+  const handleToggle = () => {
+    const theme = toggleMode();
+    updateToggleButton(button, theme);
+  };
+
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    handleToggle();
+  });
+
+  button.addEventListener('keydown', (event) => {
+    if (event.key !== ' ' && event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    handleToggle();
   });
 };
 
