@@ -1750,6 +1750,286 @@ dashboardRouter.get('/resumen', async (_req, res) => {
   }
 });
 
+const financialAnalyticsRouter = express.Router();
+
+financialAnalyticsRouter.use(ensureSupabaseConfigured);
+
+const differenceInDays = (laterDate, earlierDate) => {
+  if (!laterDate || !earlierDate) {
+    return 0;
+  }
+
+  const later = new Date(laterDate);
+  const earlier = new Date(earlierDate);
+
+  if (Number.isNaN(later.getTime()) || Number.isNaN(earlier.getTime())) {
+    return 0;
+  }
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const diff = later.setHours(0, 0, 0, 0) - earlier.setHours(0, 0, 0, 0);
+
+  return Math.max(0, Math.floor(diff / msPerDay));
+};
+
+financialAnalyticsRouter.get('/antiguedad', async (req, res) => {
+  const cutoffParam =
+    req.query?.fechaCorte ?? req.query?.fecha_corte ?? req.query?.fecha ?? req.query?.cutoff ?? null;
+  const searchParam = req.query?.search ?? req.query?.q ?? req.query?.query ?? '';
+
+  const cutoffIso = parseDateToIso(cutoffParam) ?? new Date().toISOString();
+  const cutoffDate = new Date(cutoffIso);
+
+  if (Number.isNaN(cutoffDate.getTime())) {
+    return res.status(400).json({ message: 'La fecha de corte especificada no es válida.' });
+  }
+
+  try {
+    const [facturas, terceros] = await Promise.all([
+      fetchTableData(FACTURAS_VENTA_TABLE, { limit: null }),
+      fetchTableData(TERCEROS_TABLE, { limit: null }),
+    ]);
+
+    const clientLookup = new Map();
+
+    const addClientsToLookup = (records = []) => {
+      for (const record of records ?? []) {
+        const key = buildThirdPartyLookupKey(record);
+
+        if (key) {
+          clientLookup.set(key, record);
+        }
+      }
+    };
+
+    addClientsToLookup(terceros);
+
+    const invoiceEntries = facturas.map((factura) => {
+      const rawClientIdentifier = extractInvoiceClientIdentifier(factura);
+      const normalizedClientIdentifier = normalizeIdentifier(rawClientIdentifier);
+      const clientKey =
+        normalizedClientIdentifier !== null && normalizedClientIdentifier !== undefined
+          ? String(normalizedClientIdentifier)
+          : null;
+
+      if (clientKey && !clientLookup.has(clientKey) && factura?.cliente) {
+        const maybeKey = buildThirdPartyLookupKey(factura.cliente);
+
+        if (maybeKey) {
+          clientLookup.set(maybeKey, factura.cliente);
+        }
+      }
+
+      return {
+        factura,
+        clientKey,
+        normalizedClientIdentifier,
+      };
+    });
+
+    const { totals: paymentTotalsByInvoice } = await buildInvoicePaymentAggregates(
+      invoiceEntries.map((entry) => entry.factura)
+    );
+
+    const agingByClient = new Map();
+
+    for (const { factura, clientKey, normalizedClientIdentifier } of invoiceEntries) {
+      const facturaId =
+        coerceToNumericId(factura?.id) ?? coerceToNumericId(factura?.factura_id) ??
+        coerceToNumericId(factura?.invoice_id) ??
+        coerceToNumericId(factura?.invoiceId);
+
+      const totalFactura = resolveInvoiceTotal(factura);
+      const existingPaid = resolveInvoiceExistingPaid(factura);
+      const aggregatedPaid =
+        facturaId !== null && paymentTotalsByInvoice.has(facturaId)
+          ? paymentTotalsByInvoice.get(facturaId) ?? 0
+          : existingPaid;
+      const saldoPendiente = roundCurrency(Math.max(0, totalFactura - aggregatedPaid));
+
+      if (!(saldoPendiente > 0)) {
+        continue;
+      }
+
+      const clienteRecord =
+        factura?.cliente ?? (clientKey && clientLookup.has(clientKey) ? clientLookup.get(clientKey) : null);
+
+      const displayName = clienteRecord ? getThirdPartyDisplayName(clienteRecord) : 'Cliente sin identificar';
+      const secondaryIdentifier = (() => {
+        if (clienteRecord) {
+          const preferred =
+            clienteRecord.identificacion_fiscal ??
+            clienteRecord.identificacion ??
+            clienteRecord.nit ??
+            clienteRecord.rfc ??
+            clienteRecord.codigo;
+
+          if (preferred !== undefined && preferred !== null) {
+            return String(preferred);
+          }
+        }
+
+        if (normalizedClientIdentifier !== null && normalizedClientIdentifier !== undefined) {
+          return String(normalizedClientIdentifier);
+        }
+
+        if (facturaId !== null) {
+          return `Factura ${facturaId}`;
+        }
+
+        return 'Sin identificador';
+      })();
+
+      const key = clientKey ?? secondaryIdentifier;
+
+      if (!agingByClient.has(key)) {
+        agingByClient.set(key, {
+          id: key,
+          nombre: displayName,
+          identificador: secondaryIdentifier,
+          totalPendiente: 0,
+          bucket0a30: 0,
+          bucket31a60: 0,
+          bucket61a90: 0,
+          bucketMas90: 0,
+          vencido: 0,
+          cantidadFacturas: 0,
+          diasVencidosMaximos: 0,
+          ultimaFactura: null,
+        });
+      }
+
+      const entry = agingByClient.get(key);
+
+      const dueDate = extractInvoiceDueDate(factura) ?? cutoffDate;
+      const issueDate =
+        parseRecordDate(factura, [
+          'fecha',
+          'fecha_emision',
+          'fecha_factura',
+          'creado_en',
+          'creado_el',
+          'created_at',
+        ]) ?? dueDate;
+
+      const daysOverdue = differenceInDays(cutoffDate, dueDate);
+
+      if (daysOverdue <= 30) {
+        entry.bucket0a30 = roundCurrency(entry.bucket0a30 + saldoPendiente);
+      } else if (daysOverdue <= 60) {
+        entry.bucket31a60 = roundCurrency(entry.bucket31a60 + saldoPendiente);
+      } else if (daysOverdue <= 90) {
+        entry.bucket61a90 = roundCurrency(entry.bucket61a90 + saldoPendiente);
+      } else {
+        entry.bucketMas90 = roundCurrency(entry.bucketMas90 + saldoPendiente);
+      }
+
+      entry.totalPendiente = roundCurrency(entry.totalPendiente + saldoPendiente);
+      entry.cantidadFacturas += 1;
+      entry.diasVencidosMaximos = Math.max(entry.diasVencidosMaximos, daysOverdue);
+
+      if (!entry.ultimaFactura) {
+        entry.ultimaFactura = {};
+      }
+
+      const shouldReplaceLastInvoice = (() => {
+        if (!entry.ultimaFactura?.fechaVencimiento) {
+          return true;
+        }
+
+        const currentDue = new Date(entry.ultimaFactura.fechaVencimiento);
+
+        if (Number.isNaN(currentDue.getTime())) {
+          return true;
+        }
+
+        if (!dueDate) {
+          return false;
+        }
+
+        return dueDate >= currentDue;
+      })();
+
+      if (shouldReplaceLastInvoice) {
+        entry.ultimaFactura = {
+          folio:
+            factura?.folio ??
+            factura?.numero_factura ??
+            factura?.numeroFactura ??
+            factura?.consecutivo ??
+            facturaId ??
+            '—',
+          fechaEmision: issueDate ? issueDate.toISOString() : null,
+          fechaVencimiento: dueDate ? dueDate.toISOString() : null,
+          saldoPendiente,
+          diasVencidos: daysOverdue,
+        };
+      }
+    }
+
+    const searchTerm = typeof searchParam === 'string' ? searchParam.trim().toLowerCase() : '';
+
+    const clientes = Array.from(agingByClient.values())
+      .map((entry) => {
+        const vencido = roundCurrency(entry.bucket61a90 + entry.bucketMas90);
+
+        return {
+          ...entry,
+          totalPendiente: roundCurrency(entry.totalPendiente),
+          bucket0a30: roundCurrency(entry.bucket0a30),
+          bucket31a60: roundCurrency(entry.bucket31a60),
+          bucket61a90: roundCurrency(entry.bucket61a90),
+          bucketMas90: roundCurrency(entry.bucketMas90),
+          vencido,
+        };
+      })
+      .filter((entry) => {
+        if (!searchTerm) {
+          return true;
+        }
+
+        const haystack = `${entry.nombre ?? ''} ${entry.identificador ?? ''}`.toLowerCase();
+
+        return haystack.includes(searchTerm);
+      })
+      .sort((a, b) => b.totalPendiente - a.totalPendiente);
+
+    const totalPendiente = clientes.reduce((acc, entry) => roundCurrency(acc + entry.totalPendiente), 0);
+    const totalVencido = clientes.reduce((acc, entry) => roundCurrency(acc + entry.vencido), 0);
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      fechaCorte: cutoffDate.toISOString(),
+      currency: DEFAULT_DASHBOARD_CURRENCY,
+      totalPendiente,
+      resumen: {
+        totalClientes: clientes.length,
+        saldoVencido: totalVencido,
+        saldoNoVencido: roundCurrency(Math.max(0, totalPendiente - totalVencido)),
+      },
+      clientes,
+    });
+  } catch (err) {
+    console.error('Customer aging report error:', err);
+
+    if (err?.code === '42P01' || err?.code === '42703') {
+      return res.status(404).json({
+        message: 'Las tablas necesarias para calcular la antigüedad de saldos no están configuradas.',
+        details: err.message,
+      });
+    }
+
+    return res
+      .status(500)
+      .json(
+        formatUnexpectedErrorResponse(
+          'Ocurrió un error inesperado al generar el reporte de antigüedad de saldos.',
+          err
+        )
+      );
+  }
+});
+
 const tercerosRouter = express.Router();
 
 tercerosRouter.use(ensureSupabaseConfigured);
@@ -2472,6 +2752,172 @@ const extractInvoiceLines = (payload = {}) => {
   }
 
   return [];
+};
+
+const extractInvoiceDueDate = (invoice = {}) => {
+  const dueDateColumns = [
+    'fecha_vencimiento',
+    'fecha_vto',
+    'fecha_venc',
+    'fecha_vence',
+    'fecha_limite_pago',
+    'fecha_limite',
+    'fecha_limite_factura',
+    'due_date',
+    'dueDate',
+    'fecha_pago_limite',
+  ];
+
+  const fallbackColumns = [
+    'fecha',
+    'fecha_emision',
+    'fecha_factura',
+    'creado_en',
+    'creado_el',
+    'created_at',
+  ];
+
+  const dueDate = parseRecordDate(invoice, dueDateColumns);
+
+  if (dueDate) {
+    return dueDate;
+  }
+
+  return parseRecordDate(invoice, fallbackColumns);
+};
+
+const resolveInvoiceTotal = (invoice = {}) => {
+  const candidates = [
+    invoice?.pagos_resumen?.total_factura,
+    invoice?.total,
+    invoice?.total_factura,
+    invoice?.monto_total,
+    invoice?.importe_total,
+    invoice?.gran_total,
+    invoice?.total_general,
+    invoice?.totalGeneral,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null) {
+      return roundCurrency(toNumber(candidate, 0));
+    }
+  }
+
+  const subtotal = toNumber(
+    invoice?.sub_total ?? invoice?.subtotal ?? invoice?.base ?? invoice?.valor_base ?? invoice?.total_base,
+    null
+  );
+  const impuestos = toNumber(
+    invoice?.total_impuestos ?? invoice?.totalImpuestos ?? invoice?.impuestos ?? invoice?.taxes,
+    null
+  );
+
+  if (subtotal !== null || impuestos !== null) {
+    return roundCurrency((subtotal ?? 0) + (impuestos ?? 0));
+  }
+
+  return 0;
+};
+
+const resolveInvoiceExistingPaid = (invoice = {}) => {
+  const candidates = [
+    invoice?.pagos_resumen?.total_pagado,
+    invoice?.pagos?.total_pagado,
+    invoice?.pagos?.totalPagado,
+    invoice?.total_pagado,
+    invoice?.monto_pagado,
+    invoice?.total_abonado,
+    invoice?.pagado,
+    invoice?.monto_total_pagado,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null) {
+      return roundCurrency(toNumber(candidate, 0));
+    }
+  }
+
+  return 0;
+};
+
+const buildInvoicePaymentAggregates = async (invoices = []) => {
+  const invoiceNumericIds = new Set();
+
+  for (const invoice of invoices) {
+    const candidates = [invoice?.id, invoice?.factura_id, invoice?.invoice_id, invoice?.invoiceId];
+
+    for (const candidate of candidates) {
+      const normalized = coerceToNumericId(candidate);
+
+      if (normalized !== null) {
+        invoiceNumericIds.add(normalized);
+      }
+    }
+  }
+
+  const paymentTotalsByInvoice = new Map();
+  const paymentCountsByInvoice = new Map();
+
+  if (!invoiceNumericIds.size) {
+    return { totals: paymentTotalsByInvoice, counts: paymentCountsByInvoice };
+  }
+
+  const invoiceIdsArray = Array.from(invoiceNumericIds);
+  const paymentSelectColumns = [
+    'id_factura, monto_pago, monto',
+    'id_factura, monto_pago',
+    'id_factura, monto',
+    'id_factura',
+  ];
+
+  let pagosData = null;
+  let pagosError = null;
+
+  for (const columns of paymentSelectColumns) {
+    const { data, error } = await supabaseClient
+      .from(PAGOS_RECIBIDOS_TABLE)
+      .select(columns)
+      .in('id_factura', invoiceIdsArray);
+
+    if (!error) {
+      pagosData = data ?? [];
+      pagosError = null;
+
+      if (columns !== paymentSelectColumns[0]) {
+        console.warn(`Invoice payment lookup fallback succeeded using columns: ${columns}`);
+      }
+
+      break;
+    }
+
+    if (error.code !== '42703') {
+      pagosError = error;
+      break;
+    }
+
+    pagosError = error;
+  }
+
+  if (pagosError) {
+    throw pagosError;
+  }
+
+  for (const pago of pagosData ?? []) {
+    const invoiceId = coerceToNumericId(pago?.id_factura);
+
+    if (invoiceId === null) {
+      continue;
+    }
+
+    const amount = roundCurrency(toNumber(pago?.monto_pago ?? pago?.monto ?? 0, 0));
+    const accumulated = paymentTotalsByInvoice.get(invoiceId) ?? 0;
+
+    paymentTotalsByInvoice.set(invoiceId, roundCurrency(accumulated + amount));
+    paymentCountsByInvoice.set(invoiceId, (paymentCountsByInvoice.get(invoiceId) ?? 0) + 1);
+  }
+
+  return { totals: paymentTotalsByInvoice, counts: paymentCountsByInvoice };
 };
 
 facturasRouter.get('/', async (_req, res) => {
@@ -5622,6 +6068,7 @@ cxcRouter.post('/registrar_pago', async (req, res) => {
 });
 
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/finanzas', financialAnalyticsRouter);
 app.use('/api/terceros', tercerosRouter);
 app.use('/api/articulos', articulosRouter);
 app.use('/api/facturas', facturasRouter);

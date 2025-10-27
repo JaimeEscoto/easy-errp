@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Easy ERP · Facturas Emitidas</title>
+    <title>Easy ERP · Antigüedad de Saldos</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="theme.css" />
   </head>
   <body class="min-h-screen bg-gray-100 text-gray-800">
-    <header class="sticky top-0 z-30 bg-gray-50 border-b border-gray-200">
+    <header class="sticky top-0 z-30 border-b border-gray-200 bg-gray-50">
       <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
         <button
           id="sidebar-toggle"
@@ -26,7 +26,7 @@
           <span class="text-lg font-bold tracking-tight text-blue-800">Easy ERP</span>
         </div>
         <div class="ml-auto flex items-center gap-4">
-          <div class="hidden sm:block text-sm text-gray-600">
+          <div class="hidden text-sm text-gray-600 sm:block">
             Hola, <span class="font-medium" data-user-display>Juan Pérez</span>
           </div>
           <button
@@ -50,7 +50,9 @@
             data-logout
           >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-8a2 2 0 00-2 2v4h2V5h8v14h-8v-4h-2v4a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2z" />
+              <path
+                d="M16 13v-2H7V8l-5 4 5 4v-3h9zM20 3h-8a2 2 0 00-2 2v4h2V5h8v14h-8v-4h-2v4a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2z"
+              />
             </svg>
             Cerrar Sesión
           </a>
@@ -60,7 +62,7 @@
     <div class="mx-auto grid max-w-7xl grid-cols-1 lg:grid-cols-[240px_1fr]">
       <aside
         id="sidebar"
-        class="fixed inset-y-0 left-0 z-20 w-64 -translate-x-full transform bg-gray-900 text-gray-100 transition-transform duration-200 ease-out lg:static lg:translate-x-0 lg:w-[240px]"
+        class="fixed inset-y-0 left-0 z-20 w-64 -translate-x-full transform bg-gray-900 text-gray-100 transition-transform duration-200 ease-out lg:static lg:w-[240px] lg:translate-x-0"
         aria-label="Barra de navegación lateral"
       >
         <nav class="flex h-full flex-col gap-2 p-3">
@@ -80,7 +82,9 @@
             >
               <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/40 text-indigo-100">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12 2a1 1 0 01.447.105l8 4A1 1 0 0121 7v10a1 1 0 01-.553.895l-8 4a1 1 0 01-.894 0l-8-4A1 1 0 013 17V7a1 1 0 01.553-.895l8-4A1 1 0 0112 2zm0 2.236L6 7.118v9.764l6 2.882 6-2.882V7.118l-6-2.882zM11 8h2v5h-2V8zm0 6h2v2h-2v-2z" />
+                  <path
+                    d="M12 2a1 1 0 01.447.105l8 4A1 1 0 0121 7v10a1 1 0 01-.553.895l-8 4a1 1 0 01-.894 0l-8-4A1 1 0 013 17V7a1 1 0 01.553-.895l8-4A1 1 0 0112 2zm0 2.236L6 7.118v9.764l6 2.882 6-2.882V7.118l-6-2.882zM11 8h2v5h-2V8zm0 6h2v2h-2v-2z"
+                  />
                 </svg>
               </span>
               <span>Maestros de Datos</span>
@@ -111,7 +115,7 @@
               <span class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/40 text-amber-100">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path
-                    d="M5 4a3 3 0 013-3h8a3 3 0 013 3v2h1a1 1 0 011 1v3a1 1 0 01-1 1h-1v3a3 3 0 01-3 3h-1.382l.276 1.105A1 1 0 0015.92 19H18a1 1 0 110 2H6a1 1 0 110-2h2.08a1 1 0 01.97-.895L9.327 17H8a3 3 0 01-3-3v-3H4a1 1 0 01-1-1V7a1 1 0 011-1h1V4zm2 0v2h10V4a1 1 0 00-1-1H8a1 1 0 00-1 1zm-1 6v3a1 1 0 001 1h10a1 1 0 001-1v-3H6z"
+                    d="M5 4a3 3 0 013-3h8a3 3 0 013 3v2h1a1 1 0 011 1v3a1 1 0 01-1 1h-1v3a3 3 0 01-3 3h-1.382l.276 1.105A1 1 0 015.92 19H18a1 1 0 110 2H6a1 1 0 110-2h2.08a1 1 0 01.97-.895L9.327 17H8a3 3 0 01-3-3v-3H4a1 1 0 01-1-1V7a1 1 0 011-1h1V4zm2 0v2h10V4a1 1 0 00-1-1H8a1 1 0 00-1 1zm-1 6v3a1 1 0 001 1h10a1 1 0 001-1v-3H6z"
                   />
                 </svg>
               </span>
@@ -124,7 +128,7 @@
                 </a>
               </li>
               <li>
-                <a class="block rounded-lg px-2 py-1 bg-amber-500/40 text-white" href="transacciones-facturas-emitidas.html">
+                <a class="block rounded-lg px-2 py-1 hover:bg-amber-500/40 hover:text-white" href="transacciones-facturas-emitidas.html">
                   Ver facturas emitidas
                 </a>
               </li>
@@ -146,18 +150,12 @@
             </button>
             <ul class="mt-2 space-y-1 pl-11 text-sm text-emerald-100/80">
               <li>
-                <a
-                  class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white"
-                  href="transacciones-ordenes-compra.html"
-                >
+                <a class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white" href="transacciones-ordenes-compra.html">
                   Crear orden de compra
                 </a>
               </li>
               <li>
-                <a
-                  class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white"
-                  href="transacciones-ordenes-compra-registradas.html"
-                >
+                <a class="block rounded-lg px-2 py-1 hover:bg-emerald-500/40 hover:text-white" href="transacciones-ordenes-compra-registradas.html">
                   Ver órdenes de compra
                 </a>
               </li>
@@ -179,10 +177,7 @@
             </button>
             <ul class="mt-2 space-y-1 pl-11 text-sm text-sky-100/80">
               <li>
-                <a
-                  class="block rounded-lg px-2 py-1 hover:bg-sky-500/40 hover:text-white"
-                  href="transacciones-entradas-almacen.html"
-                >
+                <a class="block rounded-lg px-2 py-1 hover:bg-sky-500/40 hover:text-white" href="transacciones-entradas-almacen.html">
                   Recibir órdenes en almacén
                 </a>
               </li>
@@ -204,7 +199,7 @@
             </button>
             <ul class="mt-2 space-y-1 pl-11 text-sm text-purple-100/80">
               <li>
-                <a class="block rounded-lg px-2 py-1 hover:bg-purple-500/40 hover:text-white" href="finanzas-analisis-antiguedad.html">
+                <a class="block rounded-lg px-2 py-1 bg-purple-500/40 text-white" href="finanzas-analisis-antiguedad.html">
                   Antigüedad de saldos
                 </a>
               </li>
@@ -222,8 +217,8 @@
             Configuraciones
           </a>
           <div class="mt-auto rounded-xl border border-gray-800 bg-gray-950/40 p-3 text-xs text-gray-400">
-            <p class="mb-1 font-semibold text-gray-300">Sugerencias</p>
-            <p>Consulta y gestiona tus facturas emitidas desde esta sección.</p>
+            <p class="mb-1 font-semibold text-gray-300">Consejo</p>
+            <p>Monitorea la antigüedad de saldos para priorizar la gestión de cobranza.</p>
           </div>
         </nav>
       </aside>
@@ -232,262 +227,168 @@
         <div class="space-y-6">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 class="text-2xl font-semibold text-gray-900">Transacciones · Facturas Emitidas</h1>
+              <h1 class="text-2xl font-semibold text-gray-900">Analítica Financiera · Antigüedad de saldos</h1>
               <p class="mt-2 text-sm text-gray-500">
-                Visualiza el historial de facturas generadas, sus importes y el cliente asociado.
+                Consulta el saldo pendiente de tus clientes, identifica montos vencidos y anticipa necesidades de
+                cobranza.
               </p>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row">
-              <a
-                href="transacciones-ventas.html"
-                class="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7h14" />
-                </svg>
-                Emitir nueva factura
-              </a>
               <button
                 type="button"
-                id="refresh-invoices"
-                class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                data-export-csv
+                class="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
               >
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M2.985 15.366v4.992h4.992M20.671 7.02A9.5 9.5 0 1011.5 21" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v9H5l7 7 7-7h-4V3H9z" />
                 </svg>
-                Actualizar listado
+                Exportar CSV
               </button>
             </div>
           </div>
 
-          <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 class="text-sm font-semibold text-gray-500">Facturas registradas</h2>
-              <p class="mt-3 text-2xl font-semibold text-gray-900" id="invoice-summary-count">—</p>
-              <p class="mt-1 text-xs text-gray-500">Total de facturas disponibles en el sistema.</p>
-            </article>
-            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 class="text-sm font-semibold text-gray-500">Total facturado</h2>
-              <p class="mt-3 text-2xl font-semibold text-gray-900" id="invoice-summary-amount">—</p>
-              <p class="mt-1 text-xs text-gray-500">Suma de los importes totales registrados.</p>
-            </article>
-            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 class="text-sm font-semibold text-gray-500">Última actualización</h2>
-              <p class="mt-3 text-2xl font-semibold text-gray-900" id="invoice-summary-updated">—</p>
-              <p class="mt-1 text-xs text-gray-500">Fecha y hora de la consulta más reciente.</p>
-            </article>
+          <section class="rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <header class="flex flex-col gap-4 border-b border-gray-200 px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
+              <div class="space-y-2">
+                <p class="text-sm font-semibold uppercase tracking-wide text-blue-700">¿Cuánto me deben y desde cuándo?</p>
+                <h2 class="text-xl font-semibold text-gray-900">Saldo total pendiente</h2>
+                <p class="text-sm text-gray-500">
+                  Actualizado al <span id="report-last-updated">—</span>. Corte al <span id="report-cutoff">—</span>.
+                </p>
+              </div>
+              <div class="grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))]">
+                <label class="flex flex-col gap-1 text-sm text-gray-600">
+                  <span class="font-medium text-gray-700">Fecha de corte</span>
+                  <input
+                    type="date"
+                    id="cutoff-date"
+                    class="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 text-sm text-gray-600 sm:col-span-1 lg:col-span-2">
+                  <span class="font-medium text-gray-700">Buscar cliente</span>
+                  <div class="relative">
+                    <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5a6 6 0 104.472 10.03l3.249 3.249a1 1 0 001.414-1.414l-3.25-3.248A6 6 0 0011 5z" />
+                      </svg>
+                    </span>
+                    <input
+                      type="search"
+                      id="search-client"
+                      placeholder="Buscar cliente por nombre o identificador"
+                      class="w-full rounded-xl border border-gray-300 px-9 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  id="refresh-aging"
+                  class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M2.985 15.366v4.992h4.992M20.671 7.02A9.5 9.5 0 1011.5 21" />
+                  </svg>
+                  Actualizar
+                </button>
+              </div>
+            </header>
+            <div class="grid gap-4 px-5 py-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <article class="rounded-2xl border border-blue-100 bg-blue-50/60 p-6 text-blue-900 shadow-sm">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-blue-700">Saldo total pendiente</h3>
+                <p id="report-total-pending" class="mt-3 text-3xl font-semibold">—</p>
+                <p class="mt-1 text-sm text-blue-800/80">
+                  Suma de los saldos pendientes de todas las facturas abiertas a la fecha seleccionada.
+                </p>
+              </article>
+              <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <dt class="font-semibold text-emerald-700">Clientes con saldo</dt>
+                  <dd id="report-total-clients" class="mt-2 text-2xl font-semibold">—</dd>
+                  <p class="mt-1 text-xs text-emerald-700/80">Clientes con facturas pendientes al corte.</p>
+                </div>
+                <div class="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-900">
+                  <dt class="font-semibold text-rose-700">Saldo vencido</dt>
+                  <dd id="report-overdue-total" class="mt-2 text-2xl font-semibold">—</dd>
+                  <p class="mt-1 text-xs text-rose-700/80">Suma de saldos mayores a 60 días de vencimiento.</p>
+                </div>
+              </dl>
+            </div>
           </section>
 
           <section class="rounded-2xl border border-gray-200 bg-white shadow-sm">
             <header class="flex flex-col gap-2 border-b border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 class="text-lg font-semibold text-gray-900">Historial de facturas emitidas</h2>
+                <h2 class="text-lg font-semibold text-gray-900">Detalle por cliente</h2>
                 <p class="text-sm text-gray-500">
-                  Revisa el estado y los importes de cada factura emitida recientemente. Haz clic en una factura para
-                  consultar los pagos registrados.
+                  Visualiza la distribución de saldos por tramo de antigüedad y enfócate en los montos vencidos.
                 </p>
               </div>
               <span
-                id="invoice-loading"
+                id="report-loading"
                 class="hidden items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
               >
                 <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v4m0 8v4m8-8h-4M8 12H4m12.95-4.95l-2.828 2.828M9.879 14.121L7.05 16.95m9.9 0l-2.828-2.829M9.879 9.879L7.05 7.05" />
                 </svg>
-                Cargando facturas…
+                Actualizando datos…
               </span>
             </header>
-            <div id="invoice-error" class="hidden border-b border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700">
-              Ocurrió un problema al consultar las facturas. Intenta nuevamente en unos segundos.
+            <div id="report-error" class="hidden border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-700">
+              Ocurrió un problema al generar el reporte. Intenta nuevamente en unos segundos.
             </div>
             <div class="overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
                     <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Folio
-                    </th>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Fecha
-                    </th>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Cliente
                     </th>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Estado
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Saldo total pendiente
                     </th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Subtotal
+                      0 - 30 días
                     </th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Impuestos
+                      31 - 60 días
                     </th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Total
+                      61 - 90 días
                     </th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Saldo pendiente
+                      + 90 días
                     </th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Acciones
+                      Vencido
                     </th>
                   </tr>
                 </thead>
-                <tbody id="invoice-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
+                <tbody id="report-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
               </table>
             </div>
-            <div
-              id="invoice-feedback"
-              class="hidden rounded-xl border border-transparent bg-green-50 px-4 py-3 text-sm text-green-800"
-              role="status"
-            ></div>
-            <div id="invoice-empty" class="hidden px-5 py-10 text-center text-sm text-gray-500">
-              Aún no se registran facturas en el sistema. Emite una nueva factura para visualizarla aquí.
+            <div id="report-empty" class="hidden px-5 py-10 text-center text-sm text-gray-500">
+              No hay facturas con saldo pendiente para la fecha de corte seleccionada.
+            </div>
+            <div class="flex items-center justify-between gap-4 border-t border-gray-200 px-5 py-4 text-sm text-gray-500">
+              <p>
+                El reporte considera todas las facturas abiertas y pagos registrados hasta la fecha de corte. Revisa los
+                datos antes de exportar.
+              </p>
+              <button
+                type="button"
+                data-export-csv
+                class="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v9H5l7 7 7-7h-4V3H9z" />
+                </svg>
+                Exportar CSV
+              </button>
             </div>
           </section>
         </div>
       </main>
-    </div>
-    <div
-      id="payment-modal-backdrop"
-      class="fixed inset-0 z-40 hidden bg-gray-900/60 backdrop-blur-sm transition-opacity"
-      aria-hidden="true"
-    ></div>
-    <div id="payment-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
-      <div class="flex min-h-full items-center justify-center p-4">
-        <div class="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
-          <form id="payment-form" class="space-y-6 p-6">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <h2 class="text-lg font-semibold text-gray-900">Registrar pago</h2>
-                <p class="mt-1 text-sm text-gray-500" id="payment-invoice-label">Factura —</p>
-              </div>
-              <button
-                type="button"
-                class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
-                id="payment-modal-close"
-                aria-label="Cerrar"
-              >
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div class="rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-              <dl class="grid grid-cols-2 gap-3">
-                <div>
-                  <dt class="text-xs uppercase tracking-wide text-gray-500">Cliente</dt>
-                  <dd id="payment-client-name" class="mt-1 font-medium text-gray-900">—</dd>
-                </div>
-                <div>
-                  <dt class="text-xs uppercase tracking-wide text-gray-500">Identificador</dt>
-                  <dd id="payment-client-id" class="mt-1 text-gray-700">—</dd>
-                </div>
-                <div>
-                  <dt class="text-xs uppercase tracking-wide text-gray-500">Total factura</dt>
-                  <dd id="payment-invoice-total" class="mt-1 font-medium text-gray-900">—</dd>
-                </div>
-                <div>
-                  <dt class="text-xs uppercase tracking-wide text-gray-500">Saldo pendiente</dt>
-                  <dd id="payment-invoice-balance" class="mt-1 font-medium text-blue-700">—</dd>
-                </div>
-              </dl>
-            </div>
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="md:col-span-2">
-                <label for="payment-amount" class="block text-sm font-medium text-gray-700">
-                  Monto del pago
-                  <span class="text-rose-500">*</span>
-                </label>
-                <div class="mt-1">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    id="payment-amount"
-                    name="payment-amount"
-                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label for="payment-date" class="block text-sm font-medium text-gray-700">
-                  Fecha del pago
-                  <span class="text-rose-500">*</span>
-                </label>
-                <div class="mt-1">
-                  <input
-                    type="date"
-                    id="payment-date"
-                    name="payment-date"
-                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de pago</label>
-                <div class="mt-1">
-                  <input
-                    type="text"
-                    id="payment-method"
-                    name="payment-method"
-                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Transferencia, efectivo, etc."
-                  />
-                </div>
-              </div>
-              <div>
-                <label for="payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
-                <div class="mt-1">
-                  <input
-                    type="text"
-                    id="payment-reference"
-                    name="payment-reference"
-                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="No. de comprobante"
-                  />
-                </div>
-              </div>
-              <div class="md:col-span-2">
-                <label for="payment-notes" class="block text-sm font-medium text-gray-700">Notas</label>
-                <div class="mt-1">
-                  <textarea
-                    id="payment-notes"
-                    name="payment-notes"
-                    rows="3"
-                    class="block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Comentarios adicionales sobre este pago"
-                  ></textarea>
-                </div>
-              </div>
-            </div>
-            <div
-              id="payment-error"
-              class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700"
-              role="alert"
-            ></div>
-            <div class="flex justify-end gap-3">
-              <button
-                type="button"
-                class="inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                id="payment-cancel"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                class="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                data-payment-submit
-              >
-                Registrar pago
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
     </div>
     <script>
       const sidebar = document.getElementById('sidebar');
@@ -517,6 +418,6 @@
     <script src="env.js"></script>
     <script src="config.js"></script>
     <script type="module" src="scripts/protected-page.js"></script>
-    <script type="module" src="scripts/transacciones-facturas-emitidas.js"></script>
+    <script type="module" src="scripts/finanzas-analisis-antiguedad.js"></script>
   </body>
 </html>
