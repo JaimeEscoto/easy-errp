@@ -252,8 +252,10 @@
             </div>
             <div class="mt-6 grid gap-6 lg:grid-cols-[360px_1fr]">
               <section class="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-                <h2 class="text-lg font-semibold text-gray-900">Nuevo almacén</h2>
-                <p class="mt-1 text-sm text-gray-600">Completa el formulario para agregar un nuevo punto de resguardo.</p>
+                <h2 id="warehouse-form-title" class="text-lg font-semibold text-gray-900">Nuevo almacén</h2>
+                <p id="warehouse-form-description" class="mt-1 text-sm text-gray-600">
+                  Completa el formulario para agregar un nuevo punto de resguardo.
+                </p>
                 <form id="warehouse-form" class="mt-4 space-y-4" novalidate>
                   <div class="space-y-2">
                     <label for="warehouse-code" class="block text-sm font-medium text-gray-700">Código</label>
@@ -300,12 +302,22 @@
                     <input type="checkbox" id="warehouse-active" name="activo" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked />
                     Almacén activo
                   </label>
-                  <button
-                    type="submit"
-                    class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  >
-                    Guardar almacén
-                  </button>
+                  <div class="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="submit"
+                      class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      id="warehouse-submit"
+                    >
+                      Guardar almacén
+                    </button>
+                    <button
+                      type="button"
+                      id="cancel-warehouse-edit"
+                      class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hidden"
+                    >
+                      Cancelar edición
+                    </button>
+                  </div>
                   <p id="warehouse-form-message" class="text-sm text-gray-600"></p>
                 </form>
               </section>
@@ -345,6 +357,7 @@
                         <th scope="col" class="px-4 py-2">Ubicación</th>
                         <th scope="col" class="px-4 py-2">Estado</th>
                         <th scope="col" class="px-4 py-2">Actualizado</th>
+                        <th scope="col" class="px-4 py-2">Acciones</th>
                       </tr>
                     </thead>
                     <tbody id="warehouse-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
