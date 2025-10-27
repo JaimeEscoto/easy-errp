@@ -3866,6 +3866,92 @@ almacenesRouter.post('/', async (req, res) => {
   }
 });
 
+almacenesRouter.put('/:id', async (req, res) => {
+  try {
+    const { id: rawId } = req.params ?? {};
+    const normalizedId = normalizeIdentifier(rawId);
+
+    if (normalizedId === null || normalizedId === undefined) {
+      return res.status(400).json({ message: 'El identificador del almacén no es válido.' });
+    }
+
+    const payload = req.body ?? {};
+    const nombre = typeof payload.nombre === 'string' ? payload.nombre.trim() : '';
+
+    if (!nombre) {
+      return res.status(400).json({ message: 'El nombre del almacén es obligatorio.' });
+    }
+
+    const timestamp = new Date().toISOString();
+    const updates = {
+      codigo: typeof payload.codigo === 'string' && payload.codigo.trim() ? payload.codigo.trim() : null,
+      nombre,
+      ubicacion:
+        typeof payload.ubicacion === 'string' && payload.ubicacion.trim() ? payload.ubicacion.trim() : null,
+      descripcion:
+        typeof payload.descripcion === 'string' && payload.descripcion.trim() ? payload.descripcion.trim() : null,
+      notas: typeof payload.notas === 'string' && payload.notas.trim() ? payload.notas.trim() : null,
+      actualizado_en: timestamp,
+    };
+
+    const booleanCandidate = payload.activo ?? payload.active ?? payload.estado ?? payload.status;
+    const activoNormalized = normalizeBoolean(booleanCandidate);
+
+    if (activoNormalized !== null) {
+      updates.activo = activoNormalized;
+    }
+
+    const actorId = extractActorId(req, payload);
+    const actorName = extractActorName(req, payload);
+
+    applyActorAuditFields(updates, actorId, { includeCreated: false });
+
+    if (actorName) {
+      updates.modificado_por_nombre = actorName;
+    }
+
+    const cleanedUpdates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined));
+
+    if (!Object.keys(cleanedUpdates).length) {
+      return res.status(400).json({ message: 'No se proporcionaron cambios para actualizar el almacén.' });
+    }
+
+    const { data, error } = await supabaseClient
+      .from(ALMACENES_TABLE)
+      .update([cleanedUpdates])
+      .eq('id', normalizedId)
+      .select();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ message: 'No se encontró el almacén solicitado.' });
+      }
+
+      console.error('Warehouse update error:', error);
+
+      return res
+        .status(500)
+        .json(formatUnexpectedErrorResponse('Unexpected error while updating warehouse.', error));
+    }
+
+    const updatedWarehouse = Array.isArray(data) ? data[0] : data ?? null;
+
+    if (!updatedWarehouse) {
+      return res.status(404).json({ message: 'No se encontró el almacén solicitado.' });
+    }
+
+    console.info(`Warehouse update success: updated warehouse ${normalizedId}.`);
+
+    return res.json(updatedWarehouse);
+  } catch (err) {
+    console.error('Unhandled warehouse update error:', err);
+
+    return res
+      .status(500)
+      .json(formatUnexpectedErrorResponse('Unexpected error while updating warehouse.', err));
+  }
+});
+
 const getRecordIdentifierKey = (value) => {
   const normalized = normalizeIdentifier(value);
 
