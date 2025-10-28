@@ -2864,53 +2864,117 @@ const buildInvoicePaymentAggregates = async (invoices = []) => {
   }
 
   const invoiceIdsArray = Array.from(invoiceNumericIds);
-  const paymentSelectColumns = [
-    'id_factura, monto_pago, monto',
-    'id_factura, monto_pago',
-    'id_factura, monto',
-    'id_factura',
+
+  const paymentLookupStrategies = [
+    {
+      column: 'id_factura',
+      selects: [
+        'id_factura, monto_pago, monto_pagado, monto',
+        'id_factura, monto_pago, monto',
+        'id_factura, monto_pago',
+        'id_factura, monto',
+        'id_factura',
+      ],
+    },
+    {
+      column: 'factura_id',
+      selects: [
+        'factura_id, monto_pago, monto_pagado, monto',
+        'factura_id, monto_pago, monto',
+        'factura_id, monto_pago',
+        'factura_id, monto',
+        'factura_id',
+      ],
+    },
+    {
+      column: 'invoice_id',
+      selects: [
+        'invoice_id, amount_pagado, amount_paid, amount, monto_pago, monto',
+        'invoice_id, amount_paid, amount',
+        'invoice_id, amount',
+        'invoice_id',
+      ],
+    },
   ];
 
+  const extractPaymentAmount = (record = {}) => {
+    const amountCandidates = [
+      record.monto_pago,
+      record.monto_pagado,
+      record.monto,
+      record.amount_pagado,
+      record.amount_paid,
+      record.amount,
+    ];
+
+    for (const candidate of amountCandidates) {
+      const numeric = toNumber(candidate, null);
+
+      if (numeric !== null) {
+        return roundCurrency(numeric);
+      }
+    }
+
+    return 0;
+  };
+
   let pagosData = null;
-  let pagosError = null;
+  let pagosColumn = null;
 
-  for (const columns of paymentSelectColumns) {
-    const { data, error } = await supabaseClient
-      .from(PAGOS_RECIBIDOS_TABLE)
-      .select(columns)
-      .in('id_factura', invoiceIdsArray);
+  for (const strategy of paymentLookupStrategies) {
+    for (const selectColumns of strategy.selects) {
+      const { data, error } = await supabaseClient
+        .from(PAGOS_RECIBIDOS_TABLE)
+        .select(selectColumns)
+        .in(strategy.column, invoiceIdsArray);
 
-    if (!error) {
-      pagosData = data ?? [];
-      pagosError = null;
+      if (!error) {
+        if (selectColumns !== strategy.selects[0]) {
+          console.warn(
+            `Invoice payment lookup fallback succeeded using column ${strategy.column} with select: ${selectColumns}`
+          );
+        }
 
-      if (columns !== paymentSelectColumns[0]) {
-        console.warn(`Invoice payment lookup fallback succeeded using columns: ${columns}`);
+        pagosData = Array.isArray(data) ? data : [];
+        pagosColumn = strategy.column;
+        break;
       }
 
-      break;
+      if (error.code === '42703') {
+        // Column not found, try the next select strategy.
+        continue;
+      }
+
+      if (error.code === '42P01') {
+        console.warn(
+          `Invoice payment lookup warning: table ${PAGOS_RECIBIDOS_TABLE} is not available. Skipping payment aggregation.`
+        );
+        return { totals: paymentTotalsByInvoice, counts: paymentCountsByInvoice };
+      }
+
+      throw error;
     }
 
-    if (error.code !== '42703') {
-      pagosError = error;
+    if (pagosData) {
       break;
     }
-
-    pagosError = error;
   }
 
-  if (pagosError) {
-    throw pagosError;
+  if (!pagosData || !pagosColumn) {
+    console.warn(
+      'Invoice payment lookup warning: none of the expected columns were found. Proceeding without payment aggregation.'
+    );
+    return { totals: paymentTotalsByInvoice, counts: paymentCountsByInvoice };
   }
 
-  for (const pago of pagosData ?? []) {
-    const invoiceId = coerceToNumericId(pago?.id_factura);
+  for (const pago of pagosData) {
+    const invoiceId = coerceToNumericId(pago?.[pagosColumn]);
 
     if (invoiceId === null) {
       continue;
     }
 
-    const amount = roundCurrency(toNumber(pago?.monto_pago ?? pago?.monto ?? 0, 0));
+    const amount = extractPaymentAmount(pago);
     const accumulated = paymentTotalsByInvoice.get(invoiceId) ?? 0;
 
     paymentTotalsByInvoice.set(invoiceId, roundCurrency(accumulated + amount));
