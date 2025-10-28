@@ -301,7 +301,7 @@
                   Suma de los saldos pendientes de todas las facturas abiertas a la fecha seleccionada.
                 </p>
               </article>
-              <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <dl class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
                   <dt class="font-semibold text-emerald-700">Clientes con saldo</dt>
                   <dd id="report-total-clients" class="mt-2 text-2xl font-semibold">—</dd>
@@ -311,6 +311,11 @@
                   <dt class="font-semibold text-rose-700">Saldo vencido</dt>
                   <dd id="report-overdue-total" class="mt-2 text-2xl font-semibold">—</dd>
                   <p class="mt-1 text-xs text-rose-700/80">Suma de saldos mayores a 60 días de vencimiento.</p>
+                </div>
+                <div class="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                  <dt class="font-semibold text-blue-700">Saldo no vencido</dt>
+                  <dd id="report-not-overdue-total" class="mt-2 text-2xl font-semibold">—</dd>
+                  <p class="mt-1 text-xs text-blue-700/80">Monto aún dentro del periodo de crédito pactado.</p>
                 </div>
               </dl>
             </div>
@@ -361,6 +366,24 @@
                     </th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Vencido
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Facturas activas
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Máx. días vencidos
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Última factura
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Emisión
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Vencimiento
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Saldo último folio
                     </th>
                   </tr>
                 </thead>
