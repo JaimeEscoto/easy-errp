@@ -30,6 +30,7 @@ const exportButtons = document.querySelectorAll('[data-export-csv]');
 const totalPendingElement = document.getElementById('report-total-pending');
 const totalClientsElement = document.getElementById('report-total-clients');
 const overdueTotalElement = document.getElementById('report-overdue-total');
+const notOverdueTotalElement = document.getElementById('report-not-overdue-total');
 const lastUpdatedElement = document.getElementById('report-last-updated');
 const cutoffLabelElement = document.getElementById('report-cutoff');
 const loadingIndicator = document.getElementById('report-loading');
@@ -37,6 +38,7 @@ const errorBanner = document.getElementById('report-error');
 const emptyState = document.getElementById('report-empty');
 const tableBody = document.getElementById('report-table-body');
 
+let searchDebounceHandle = null;
 let currentReport = {
   currency: 'USD',
   generatedAt: null,
@@ -119,6 +121,9 @@ const renderSummary = (report) => {
   totalPendingElement.textContent = formatCurrency(report.totalPendiente);
   totalClientsElement.textContent = report.resumen?.totalClientes ?? 0;
   overdueTotalElement.textContent = formatCurrency(report.resumen?.saldoVencido ?? 0);
+  if (notOverdueTotalElement) {
+    notOverdueTotalElement.textContent = formatCurrency(report.resumen?.saldoNoVencido ?? 0);
+  }
   lastUpdatedElement.textContent = formatDateTime(report.generatedAt ?? new Date());
   cutoffLabelElement.textContent = formatDateTime(report.fechaCorte ?? new Date(), {
     dateStyle: 'long',
@@ -176,6 +181,49 @@ const renderTable = (clients) => {
     }`;
     overdueCell.textContent = formatCurrency(client.vencido);
 
+    const activeInvoicesCell = document.createElement('td');
+    activeInvoicesCell.className = 'px-4 py-4 text-center text-sm text-gray-600';
+    activeInvoicesCell.textContent = client.cantidadFacturas ?? 0;
+
+    const maxOverdueCell = document.createElement('td');
+    maxOverdueCell.className = 'px-4 py-4 text-right text-sm text-gray-600';
+    maxOverdueCell.textContent = client.diasVencidosMaximos ?? 0;
+
+    const lastInvoiceCell = document.createElement('td');
+    lastInvoiceCell.className = 'px-4 py-4 text-left text-sm text-gray-600';
+    lastInvoiceCell.innerHTML = (() => {
+      if (!client.ultimaFactura?.folio) {
+        return '<span class="text-gray-400">—</span>';
+      }
+
+      return `
+        <div class="flex flex-col">
+          <span class="font-medium text-gray-700">${client.ultimaFactura.folio}</span>
+          <span class="text-xs text-gray-400">${
+            client.ultimaFactura?.diasVencidos !== undefined && client.ultimaFactura?.diasVencidos !== null
+              ? `${client.ultimaFactura.diasVencidos} días vencidos`
+              : 'Sin atraso'
+          }</span>
+        </div>
+      `;
+    })();
+
+    const lastEmissionCell = document.createElement('td');
+    lastEmissionCell.className = 'px-4 py-4 text-right text-sm text-gray-600';
+    lastEmissionCell.textContent = client.ultimaFactura?.fechaEmision
+      ? formatDateTime(client.ultimaFactura.fechaEmision, { dateStyle: 'medium' })
+      : '—';
+
+    const lastDueCell = document.createElement('td');
+    lastDueCell.className = 'px-4 py-4 text-right text-sm text-gray-600';
+    lastDueCell.textContent = client.ultimaFactura?.fechaVencimiento
+      ? formatDateTime(client.ultimaFactura.fechaVencimiento, { dateStyle: 'medium' })
+      : '—';
+
+    const lastBalanceCell = document.createElement('td');
+    lastBalanceCell.className = 'px-4 py-4 text-right text-sm text-gray-600';
+    lastBalanceCell.textContent = formatCurrency(client.ultimaFactura?.saldoPendiente);
+
     row.append(
       nameCell,
       totalCell,
@@ -183,7 +231,13 @@ const renderTable = (clients) => {
       bucket3160Cell,
       bucket6190Cell,
       bucket90Cell,
-      overdueCell
+      overdueCell,
+      activeInvoicesCell,
+      maxOverdueCell,
+      lastInvoiceCell,
+      lastEmissionCell,
+      lastDueCell,
+      lastBalanceCell
     );
 
     fragment.append(row);
@@ -200,6 +254,12 @@ const updateReport = async () => {
 
     if (cutoffDateInput?.value) {
       params.fechaCorte = cutoffDateInput.value;
+    }
+
+    const searchTerm = searchInput?.value?.trim();
+
+    if (searchTerm) {
+      params.search = searchTerm;
     }
 
     const response = await fetch(buildUrl('/api/finanzas/antiguedad', params));
@@ -337,6 +397,15 @@ const initialize = () => {
 
   searchInput?.addEventListener('input', () => {
     handleSearchChange();
+
+    if (searchDebounceHandle) {
+      clearTimeout(searchDebounceHandle);
+    }
+
+    searchDebounceHandle = setTimeout(() => {
+      searchDebounceHandle = null;
+      updateReport();
+    }, 350);
   });
 
   exportButtons.forEach((button) => {
