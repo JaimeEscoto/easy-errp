@@ -23,20 +23,20 @@ const buildUrl = (path, params) => {
   return backendBaseUrl ? url.toString() : `${path}${url.search}`;
 };
 
-const cutoffDateInput = document.getElementById('cutoff-date');
-const searchInput = document.getElementById('search-client');
-const refreshButton = document.getElementById('refresh-aging');
-const exportButtons = document.querySelectorAll('[data-export-csv]');
-const totalPendingElement = document.getElementById('report-total-pending');
-const totalClientsElement = document.getElementById('report-total-clients');
-const overdueTotalElement = document.getElementById('report-overdue-total');
-const notOverdueTotalElement = document.getElementById('report-not-overdue-total');
-const lastUpdatedElement = document.getElementById('report-last-updated');
-const cutoffLabelElement = document.getElementById('report-cutoff');
-const loadingIndicator = document.getElementById('report-loading');
-const errorBanner = document.getElementById('report-error');
-const emptyState = document.getElementById('report-empty');
-const tableBody = document.getElementById('report-table-body');
+let cutoffDateInput = null;
+let searchInput = null;
+let refreshButton = null;
+let exportButtons = [];
+let totalPendingElement = null;
+let totalClientsElement = null;
+let overdueTotalElement = null;
+let notOverdueTotalElement = null;
+let lastUpdatedElement = null;
+let cutoffLabelElement = null;
+let loadingIndicator = null;
+let errorBanner = null;
+let emptyState = null;
+let tableBody = null;
 
 let searchDebounceHandle = null;
 let currentReport = {
@@ -84,18 +84,29 @@ const formatDateTime = (value, options = { dateStyle: 'medium', timeStyle: 'shor
 
 const setLoading = (isLoading) => {
   if (isLoading) {
-    loadingIndicator?.classList.remove('hidden');
-    errorBanner?.classList.add('hidden');
-  } else {
-    loadingIndicator?.classList.add('hidden');
+    if (loadingIndicator) {
+      loadingIndicator.classList.remove('hidden');
+    }
+
+    if (errorBanner) {
+      errorBanner.classList.add('hidden');
+    }
+
+    return;
+  }
+
+  if (loadingIndicator) {
+    loadingIndicator.classList.add('hidden');
   }
 };
 
 const showError = (message) => {
-  if (errorBanner) {
-    errorBanner.textContent = message;
-    errorBanner.classList.remove('hidden');
+  if (!errorBanner) {
+    return;
   }
+
+  errorBanner.textContent = message;
+  errorBanner.classList.remove('hidden');
 };
 
 const applySearchFilter = (clients = []) => {
@@ -118,20 +129,39 @@ const renderSummary = (report) => {
     minimumFractionDigits: 2,
   });
 
-  totalPendingElement.textContent = formatCurrency(report.totalPendiente);
-  totalClientsElement.textContent = report.resumen?.totalClientes ?? 0;
-  overdueTotalElement.textContent = formatCurrency(report.resumen?.saldoVencido ?? 0);
+  if (totalPendingElement) {
+    totalPendingElement.textContent = formatCurrency(report.totalPendiente);
+  }
+
+  if (totalClientsElement) {
+    totalClientsElement.textContent = report.resumen?.totalClientes ?? 0;
+  }
+
+  if (overdueTotalElement) {
+    overdueTotalElement.textContent = formatCurrency(report.resumen?.saldoVencido ?? 0);
+  }
+
   if (notOverdueTotalElement) {
     notOverdueTotalElement.textContent = formatCurrency(report.resumen?.saldoNoVencido ?? 0);
   }
-  lastUpdatedElement.textContent = formatDateTime(report.generatedAt ?? new Date());
-  cutoffLabelElement.textContent = formatDateTime(report.fechaCorte ?? new Date(), {
-    dateStyle: 'long',
-    timeStyle: undefined,
-  });
+
+  if (lastUpdatedElement) {
+    lastUpdatedElement.textContent = formatDateTime(report.generatedAt ?? new Date());
+  }
+
+  if (cutoffLabelElement) {
+    cutoffLabelElement.textContent = formatDateTime(report.fechaCorte ?? new Date(), {
+      dateStyle: 'long',
+      timeStyle: undefined,
+    });
+  }
 };
 
 const renderTable = (clients) => {
+  if (!tableBody) {
+    return;
+  }
+
   tableBody.innerHTML = '';
 
   if (!clients.length) {
@@ -382,6 +412,21 @@ const handleSearchChange = () => {
 };
 
 const initialize = () => {
+  cutoffDateInput = document.getElementById('cutoff-date');
+  searchInput = document.getElementById('search-client');
+  refreshButton = document.getElementById('refresh-aging');
+  exportButtons = Array.from(document.querySelectorAll('[data-export-csv]'));
+  totalPendingElement = document.getElementById('report-total-pending');
+  totalClientsElement = document.getElementById('report-total-clients');
+  overdueTotalElement = document.getElementById('report-overdue-total');
+  notOverdueTotalElement = document.getElementById('report-not-overdue-total');
+  lastUpdatedElement = document.getElementById('report-last-updated');
+  cutoffLabelElement = document.getElementById('report-cutoff');
+  loadingIndicator = document.getElementById('report-loading');
+  errorBanner = document.getElementById('report-error');
+  emptyState = document.getElementById('report-empty');
+  tableBody = document.getElementById('report-table-body');
+
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -417,5 +462,13 @@ const initialize = () => {
 
   updateReport();
 };
+const start = () => {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize, { once: true });
+    return;
+  }
 
-initialize();
+  initialize();
+};
+
+start();
